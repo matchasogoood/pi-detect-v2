@@ -52,6 +52,15 @@ body.dragging.col{cursor:col-resize}body.dragging.row{cursor:row-resize}
 .col{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden;position:relative}
 .col>h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:0;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
 .col>h2 .sp{flex:1}
+.colbtn{padding:0 8px;line-height:1.5;font-size:15px;font-weight:700;text-transform:none;letter-spacing:0;order:9;flex:none}
+.col.collapsed{min-height:0}
+.col.collapsed>*:not(h2){display:none}
+.col.collapsed #gloss{display:none}
+.col.collapsed>h2{flex-direction:column;align-items:center;gap:12px;padding:10px 4px;border-bottom:0;flex:1}
+.col.collapsed>h2 .sp,.col.collapsed #ms,.col.collapsed #gbtn{display:none}
+.col.collapsed .colbtn{order:-1}
+.col.collapsed .ttl{writing-mode:vertical-rl;white-space:nowrap}
+.vsplit.off{pointer-events:none;visibility:hidden}
 .scroll{flex:1;overflow:auto;padding:12px 14px}
 /* chat */
 .msg{max-width:92%;max-height:230px;overflow:auto;margin:0 0 10px;padding:8px 11px;border-radius:12px;white-space:pre-wrap;word-break:break-word;cursor:pointer;border:1px solid transparent}
@@ -148,7 +157,7 @@ body.dragging.col{cursor:col-resize}body.dragging.row{cursor:row-resize}
 .g-item .from{font-size:12px;color:var(--mute)}
 .empty{color:var(--mute);text-align:center;margin-top:40px}
 @media (max-width:1100px){main{padding:8px}.msg{max-width:98%}.card .kv{font-size:12.5px}}
-@media (max-width:760px){main{grid-template-columns:1fr !important;overflow:auto;gap:12px}.vsplit,.hsplit{display:none}.col{min-height:460px}#c2{min-height:min(820px,150vw)}#c1{min-height:560px}#c3{min-height:520px}}
+@media (max-width:760px){.col.collapsed{min-height:0 !important}.col.collapsed>h2{flex-direction:row;padding:10px 14px}.col.collapsed .ttl{writing-mode:horizontal-tb}main{grid-template-columns:1fr !important;overflow:auto;gap:12px}.vsplit,.hsplit{display:none}.col{min-height:460px}#c2{min-height:min(820px,150vw)}#c1{min-height:560px}#c3{min-height:520px}}
 </style>
 </head>
 <body>
@@ -186,13 +195,13 @@ body.dragging.col{cursor:col-resize}body.dragging.row{cursor:row-resize}
   <div class="vsplit" id="v1" title="Drag to resize. Double-click to reset." data-tt="drag"></div>
   <!-- 2 pipeline -->
   <section class="col" id="c2">
-    <h2>2 &middot; Pipeline <span class="sp"></span><span id="ms" style="text-transform:none;letter-spacing:0"></span></h2>
+    <h2><span class="ttl">2 &middot; Pipeline</span> <span class="sp"></span><span id="ms" style="text-transform:none;letter-spacing:0"></span><button class="btn colbtn" data-col="c2" data-tt="hide" title="Hide this panel (click again to show it)">&ndash;</button></h2>
     <div class="scroll" id="pipe"></div>
   </section>
   <div class="vsplit" id="v2" title="Drag to resize. Double-click to reset." data-tt="drag"></div>
   <!-- 3 numbers -->
   <section class="col" id="c3">
-    <h2><span data-t="c3">3 &middot; Numbers</span> <span class="sp"></span><button class="btn" id="gbtn" style="text-transform:none;letter-spacing:0" data-t="gbtn">What are these variables?</button></h2>
+    <h2><span class="ttl" data-t="c3">3 &middot; Numbers</span> <span class="sp"></span><button class="btn" id="gbtn" style="text-transform:none;letter-spacing:0" data-t="gbtn">What are these variables?</button><button class="btn colbtn" data-col="c3" data-tt="hide" title="Hide this panel (click again to show it)">&ndash;</button></h2>
     <div class="scroll" id="nums"><div class="empty" data-t="numsEmpty">The values computed for the selected event appear here.</div></div>
     <div id="gloss">
       <div class="vsplit" id="v3" title="Drag to resize this panel. Double-click to reset." data-tt="drag3"></div>
@@ -444,16 +453,21 @@ function renderNums(e){
   h+='<div class="card" id="n-st"><h3>Session state after this event</h3><div class="kv">'
     +row("R","reference set",sa.has_R?"yes":"no","R")+row("trust","reference trusted",sa.trust?"yes":"no","z")+row("a","CUSUM",fmt(sa.a),"a")+row("window","retrieved chunks in window",sa.window,"o")+'</div>'
     +'<div class="small">blocked sources: '+(Object.keys(sa.blocked_sources).length?esc(Object.keys(sa.blocked_sources).join(", ")):"none")+'</div></div>';
-  $("#nums").innerHTML=h;
+  $("#nums").innerHTML=h; clearFocus();
   $("#nums").querySelectorAll("[data-g]").forEach(c=>c.onclick=()=>openGloss(c.dataset.g));
 }
+let FOCUS=null;       // the pipeline box that is selected (null = nothing selected)
+function clearFocus(){ document.querySelectorAll(".nd.focus,.card.focus").forEach(x=>x.classList.remove("focus")); FOCUS=null; }
 function focusNums(id){
-  document.querySelectorAll(".nd").forEach(x=>x.classList.remove("focus")); document.querySelectorAll(".card").forEach(x=>x.classList.remove("focus"));
-  const m={s1:"n-s1",s2:"n-s2",bank:"n-s2",s3:"n-s3",s4:"n-s4",dir:"n-s4",dm:"n-dm",f0:"n-dm",f1:"n-dm",f2:"n-dm",ses:"n-st"}[id]; NODE[id]?.classList.add("focus");
+  document.querySelectorAll(".nd.focus,.card.focus").forEach(x=>x.classList.remove("focus"));
+  const m={s1:"n-s1",s2:"n-s2",bank:"n-s2",s3:"n-s3",s4:"n-s4",dir:"n-s4",dm:"n-dm",f0:"n-dm",f1:"n-dm",f2:"n-dm",ses:"n-st"}[id]; NODE[id]?.classList.add("focus"); FOCUS=id;
   const c=m&&$("#"+m); if(c){ c.classList.add("focus"); c.scrollIntoView({behavior:"smooth",block:"nearest"}); }
-  if(id in GSTAGE) openGlossStage(GSTAGE[id]);        // same explanation as the "What are these variables?" button, at this stage
-  else openGloss("c");                                  // user prompt / retrieved content / text interceptor: the channel flag
+  if($("#gloss").classList.contains("open")) openGlossFor(id);      // the glossary is already open: point it at this box
 }
+function openGlossFor(id){ if(id in GSTAGE) openGlossStage(GSTAGE[id]); else if(id) openGloss("c"); else openGloss(null); }
+// click on empty space: back to the state before anything was selected
+$("#pipe").addEventListener("click",ev=>{ if(!ev.target.closest(".nd")) clearFocus(); });
+$("#nums").addEventListener("click",ev=>{ if(!ev.target.closest(".card")) clearFocus(); });
 
 /* ---------- language: EN (default) / TH. Thai covers the buttons, headings, hints and the variable glossary;
    the pipeline diagram, the chat texts, the verdicts and the numbers stay in English. Not remembered between visits. ---------- */
@@ -465,7 +479,7 @@ const TXT={
   o_any:"Any dataset (random)",o_da:"User msg: attack",o_db:"User msg: benign",o_pp:"Document: poisoned",o_pc:"Document: clean",
   o_da_t:"deepset, Gandalf, held-out attack families",o_db_t:"deepset benign, NotInject, our own trigger-word messages",o_pp_t:"TaskTracker, BIPIA with an inserted attack, mock knowledge base",o_pc_t:"TaskTracker, BIPIA, mock knowledge base, security articles that quote attacks",
   kind:"Where the random example comes from: the held-out TEST split of the seed (the system never trained on it)",rand:"🎲 Random sample",txt:"Type here. Enter sends, Shift+Enter = new line",
-  ch_d:"User message",ch_i:"Retrieved document",ch_d_t:"Text the user typed",ch_i_t:"A document, web page or tool output retrieved by the system",send:"Send",
+  ch_d:"User message",ch_i:"Retrieved document",ch_d_t:"Text the user typed",ch_i_t:"A document, web page or tool output retrieved by the system",send:"Send",hide:"Hide this panel (click again to show it)",show:"Show this panel again",
   h1:"Drag to resize the input area. Double-click to reset.",drag:"Drag to resize. Double-click to reset.",drag3:"Drag to resize this panel. Double-click to reset.",
   gtitle:"Variables: what they mean",gtitle_t:"Variables: what they mean and where they come from",close:"Close",gq:"Search (e.g. CUSUM, tau)",source:"Source:",fixed:"Fixed values of this run",
   lang:"Interface language: buttons and the variable glossary (the pipeline and the chat stay in English)"},
@@ -474,7 +488,7 @@ const TXT={
   o_any:"ทุก dataset (สุ่ม)",o_da:"ข้อความผู้ใช้: โจมตี",o_db:"ข้อความผู้ใช้: ปกติ",o_pp:"เอกสาร: ถูกฝังคำสั่ง",o_pc:"เอกสาร: สะอาด",
   o_da_t:"deepset, Gandalf, กลุ่มการโจมตีที่กันไว้ไม่ให้เห็นตอนฝึก",o_db_t:"deepset ฝั่งปกติ, NotInject, ข้อความที่มีคำกระตุ้นซึ่งเราเขียนเอง",o_pp_t:"TaskTracker, BIPIA ที่ใส่การโจมตี, ฐานความรู้จำลอง",o_pc_t:"TaskTracker, BIPIA, ฐานความรู้จำลอง, บทความความปลอดภัยที่อ้างการโจมตี",
   kind:"แหล่งที่มาของตัวอย่างสุ่ม: TEST split ของ seed ที่กันไว้ (ระบบไม่เคยเห็นตอนฝึก)",rand:"🎲 สุ่มตัวอย่าง",txt:"พิมพ์ที่นี่ กด Enter เพื่อส่ง, Shift+Enter = ขึ้นบรรทัดใหม่",
-  ch_d:"ข้อความผู้ใช้",ch_i:"เอกสารที่ดึงมา",ch_d_t:"ข้อความที่ผู้ใช้พิมพ์เอง",ch_i_t:"เอกสาร เว็บเพจ หรือผลลัพธ์ของเครื่องมือที่ระบบดึงมา",send:"ส่ง",
+  ch_d:"ข้อความผู้ใช้",ch_i:"เอกสารที่ดึงมา",ch_d_t:"ข้อความที่ผู้ใช้พิมพ์เอง",ch_i_t:"เอกสาร เว็บเพจ หรือผลลัพธ์ของเครื่องมือที่ระบบดึงมา",send:"ส่ง",hide:"ซ่อนช่องนี้ (กดอีกครั้งเพื่อแสดง)",show:"แสดงช่องนี้อีกครั้ง",
   h1:"ลากเพื่อปรับความสูงของช่องพิมพ์ ดับเบิลคลิกเพื่อรีเซ็ต",drag:"ลากเพื่อปรับขนาด ดับเบิลคลิกเพื่อรีเซ็ต",drag3:"ลากเพื่อปรับขนาดช่องนี้ ดับเบิลคลิกเพื่อรีเซ็ต",
   gtitle:"ตัวแปร: ความหมาย",gtitle_t:"ตัวแปร: ความหมายและที่มาของแต่ละตัว",close:"ปิด",gq:"ค้นหา (เช่น CUSUM, tau)",source:"ที่มา:",fixed:"ค่าคงที่ของการรันนี้",
   lang:"ภาษาของหน้าจอ: ปุ่ม หัวข้อ และคำอธิบายตัวแปร (pipeline และแชทยังเป็นภาษาอังกฤษ)"}};
@@ -543,7 +557,8 @@ $("#send").onclick=()=>{ const t=$("#txt").value; $("#txt").value=""; send(t,cha
 $("#txt").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("#send").click(); } });
 $("#chan").querySelectorAll("button").forEach(b=>b.onclick=()=>{ channel=b.dataset.c; $("#chan").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); });
 $("#reset").onclick=()=>{ if(!busy) newSession(); };
-$("#gbtn").onclick=()=>openGloss(null); $("#gclose").onclick=()=>$("#gloss").classList.remove("open"); $("#gq").oninput=buildGloss;
+$("#gbtn").onclick=()=>openGlossFor(FOCUS);      /* with a box selected, the glossary opens at its stage */
+$("#gclose").onclick=()=>$("#gloss").classList.remove("open"); $("#gq").oninput=buildGloss;
 $("#theme").onclick=()=>{ const r=document.documentElement; r.dataset.theme=r.dataset.theme==="dark"?"light":"dark"; };
 
 /* ---------- resizable panels (drag the bars; double-click resets) ---------- */
@@ -552,7 +567,20 @@ const COLS_DEFAULT=[0.85,1.45,1.0];
 try{ localStorage.removeItem("pi_cols"); localStorage.removeItem("pi_comp"); }catch(e){}
 function loadLS(k,d){ return d; }
 function saveLS(k,v){}
-function applyCols(c){ const m=$("main"); if(window.innerWidth<=760){ m.style.gridTemplateColumns=""; return; } m.style.gridTemplateColumns="minmax(0,"+c[0]+"fr) 10px minmax(0,"+c[1]+"fr) 10px minmax(0,"+c[2]+"fr)"; }
+const COLLAPSED={c2:false,c3:false};      // panels 2 and 3 can be hidden (not remembered between visits)
+function applyCols(c){
+  const m=$("main"); $("#v1").classList.toggle("off",COLLAPSED.c2); $("#v2").classList.toggle("off",COLLAPSED.c2||COLLAPSED.c3);
+  if(window.innerWidth<=760){ m.style.gridTemplateColumns=""; return; }
+  const w2="44px", w3="44px";
+  const sum=c[0]+(COLLAPSED.c2?0:c[1])+(COLLAPSED.c3?0:c[2]);   // fr values must add up to 1 or the grid leaves a gap
+  const f=v=>"minmax(0,"+(v/sum).toFixed(4)+"fr)";
+  m.style.gridTemplateColumns=f(c[0])+" 10px "+(COLLAPSED.c2?w2:f(c[1]))+" 10px "+(COLLAPSED.c3?w3:f(c[2]));
+}
+document.querySelectorAll(".colbtn").forEach(b=>b.onclick=()=>{
+  const id=b.dataset.col; COLLAPSED[id]=!COLLAPSED[id];
+  $("#"+id).classList.toggle("collapsed",COLLAPSED[id]); b.textContent=COLLAPSED[id]?"+":"\u2013";
+  b.title=tr(COLLAPSED[id]?"show":"hide"); b.dataset.tt=COLLAPSED[id]?"show":"hide"; applyCols(cols);
+});
 let cols=loadLS("pi_cols",COLS_DEFAULT); if(!Array.isArray(cols)||cols.length!==3) cols=COLS_DEFAULT.slice();
 applyCols(cols); window.addEventListener("resize",()=>applyCols(cols));
 function dragCols(handle,i){
