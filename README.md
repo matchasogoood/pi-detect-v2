@@ -142,10 +142,6 @@ results/       small result tables of the final run (no raw logs)
 docs/          the long experiment guide
 ```
 
-## Team
-
-SIIT, CSS453, instructor Somchart Fugkeaw. Add the group members and their contributions here.
-
 ## License
 
-Not chosen yet. Add a LICENSE file before making the repository public.
+No license file is provided, so all rights are reserved by the authors. The code is shared for the course project; ask the authors before reusing it.
