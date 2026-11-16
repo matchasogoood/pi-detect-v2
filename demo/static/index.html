@@ -178,11 +178,11 @@ body.dragging.col{cursor:col-resize}body.dragging.row{cursor:row-resize}
     <div class="composer" id="comp">
       <div class="chips" id="chips"></div>
       <div class="row" id="samp"><select id="kind" title="Where the random example comes from: the held-out TEST split of the seed (the system never trained on it)" data-tt="kind">
-        <option value="any" data-t="o_any">Any dataset (random)</option>
-        <option value="direct_attack" title="deepset, Gandalf, held-out attack families" data-tt="o_da_t" data-t="o_da">User msg: attack</option>
-        <option value="direct_benign" title="deepset benign, NotInject, our own trigger-word messages" data-tt="o_db_t" data-t="o_db">User msg: benign</option>
-        <option value="doc_poisoned" title="TaskTracker, BIPIA with an inserted attack, mock knowledge base" data-tt="o_pp_t" data-t="o_pp">Document: poisoned</option>
-        <option value="doc_clean" title="TaskTracker, BIPIA, mock knowledge base, security articles that quote attacks" data-tt="o_pc_t" data-t="o_pc">Document: clean</option>
+        <option value="any" data-ch="both" data-t="o_any">Any dataset (random)</option>
+        <option value="direct_attack" data-ch="direct" title="deepset, Gandalf, held-out attack families" data-tt="o_da_t" data-t="o_da">User msg: attack</option>
+        <option value="direct_benign" data-ch="direct" title="deepset benign, NotInject, our own trigger-word messages" data-tt="o_db_t" data-t="o_db">User msg: benign</option>
+        <option value="doc_poisoned" data-ch="indirect" title="TaskTracker, BIPIA with an inserted attack, mock knowledge base" data-tt="o_pp_t" data-t="o_pp">Document: poisoned</option>
+        <option value="doc_clean" data-ch="indirect" title="TaskTracker, BIPIA, mock knowledge base, security articles that quote attacks" data-tt="o_pc_t" data-t="o_pc">Document: clean</option>
       </select><button class="btn" id="rand" data-t="rand">&#127922; Random sample</button></div>
       <textarea id="txt" placeholder="Type here. Enter sends, Shift+Enter = new line" data-tp="txt"></textarea>
       <div class="row">
@@ -225,7 +225,7 @@ async function init(){
   cfg = await api("/api/config"); gloss = await api("/api/glossary"); examples = await api("/api/examples");
   $(".demo-tag").title = cfg.system + " | seed " + cfg.seed;   // not shown in the header; hover the DEMO tag to see it
   if(cfg.stub) $("#banner").style.display="block";
-  buildChips(); buildGloss(); await newSession(); renderPipe();
+  syncChannel(); buildGloss(); await newSession(); renderPipe();
 }
 async function newSession(){
   sid = (await api("/api/new", {})).session; events=[]; selected=-1; queues={};
@@ -233,9 +233,17 @@ async function newSession(){
   $("#nums").innerHTML='<div class="empty" data-t="numsEmpty">'+tr("numsEmpty")+'</div>';
   $("#ms").textContent=""; renderPipe();
 }
+// The channel switch (User message / Retrieved document) decides which example buttons and which datasets are offered
+const SCEN_CH={benign:"direct",direct:"direct","topic-change":"direct",doc:"indirect",split:"indirect",drift:"indirect"};
+function syncChannel(){
+  buildChips();
+  const sel=$("#kind"); let ok=false;
+  [...sel.options].forEach(o=>{ const show=o.dataset.ch==="both"||o.dataset.ch===channel; o.hidden=!show; o.disabled=!show; if(show&&o.value===sel.value) ok=true; });
+  if(!ok) sel.value="any";
+}
 function buildChips(){
   const box=$("#chips"); box.innerHTML="";
-  examples.scenarios.forEach(s=>{ const b=document.createElement("button"); b.className="chip"; b.textContent="▶ "+(lang==="th"&&s.title_th?s.title_th:s.title); b.title=(lang==="th"&&s.blurb_th?s.blurb_th:s.blurb); b.onclick=()=>playScenario(s); box.appendChild(b); });
+  examples.scenarios.filter(s=>SCEN_CH[s.id]===channel).forEach(s=>{ const b=document.createElement("button"); b.className="chip"; b.textContent="▶ "+(lang==="th"&&s.title_th?s.title_th:s.title); b.title=(lang==="th"&&s.blurb_th?s.blurb_th:s.blurb); b.onclick=()=>playScenario(s); box.appendChild(b); });
 }
 const ROLE={instruction:"user task",followup:"user follow-up",doc:"retrieved document",bridge:"slightly off-topic chunk",attack:"injected instruction",benign_turn:"benign turn"};
 let queues={};   // per-kind pieces still to send for the multi-chunk scenarios; cleared by "New session"
@@ -547,7 +555,9 @@ async function send(text, ch, meta, source){
 async function randomSample(){
   if(busy||playing) return; busy=false;
   try{
-    const s=await api("/api/sample?kind="+encodeURIComponent($("#kind").value));
+    let kind=$("#kind").value;
+    if(kind==="any"){ const ks=channel==="direct"?["direct_attack","direct_benign"]:["doc_poisoned","doc_clean"]; kind=ks[Math.floor(Math.random()*2)]; }   // "any" = any dataset of the selected channel
+    const s=await api("/api/sample?kind="+encodeURIComponent(kind));
     if(s.channel==="indirect" && s.task && !events.some(e=>e&&e.channel==="direct")){ await send(s.task,"direct",{dataset:s.dataset+" (the user's task)",label:"benign"}); await sleep(300); }
     await send(s.text,s.channel,s);
   }catch(err){ alert("Sampling failed: "+err.message); }
@@ -555,7 +565,7 @@ async function randomSample(){
 $("#rand").onclick=randomSample;
 $("#send").onclick=()=>{ const t=$("#txt").value; $("#txt").value=""; send(t,channel); };
 $("#txt").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("#send").click(); } });
-$("#chan").querySelectorAll("button").forEach(b=>b.onclick=()=>{ channel=b.dataset.c; $("#chan").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); });
+$("#chan").querySelectorAll("button").forEach(b=>b.onclick=()=>{ channel=b.dataset.c; $("#chan").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); syncChannel(); });
 $("#reset").onclick=()=>{ if(!busy) newSession(); };
 $("#gbtn").onclick=()=>openGlossFor(FOCUS);      /* with a box selected, the glossary opens at its stage */
 $("#gclose").onclick=()=>$("#gloss").classList.remove("open"); $("#gq").oninput=buildGloss;

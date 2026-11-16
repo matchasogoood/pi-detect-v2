@@ -37,6 +37,10 @@ running. Wait for `demo ready`.
 
 - **Type** a message and choose *User message* (the user typed it) or *Retrieved document* (RAG content, web page,
   tool output). A retrieved document is judged against the user's latest task, so send a user message first.
+- The **User message / Retrieved document** switch also decides what is offered above it: with *User message* the example
+  buttons are Benign question, Direct attack and Legitimate topic change and the dataset list holds user-message sets only;
+  with *Retrieved document* they are Injection inside a document, Split across chunks and Topic drift, with document sets only.
+  "Any dataset" means any dataset of the selected channel.
 - **Random sample** draws one example from the held-out **test** split of the seed: direct attacks (deepset, Gandalf),
   benign messages (deepset, NotInject, our own trigger-word messages), poisoned documents (TaskTracker, BIPIA with an
   attack inserted, mock knowledge base) or clean documents (TaskTracker, BIPIA, mock knowledge base, security
