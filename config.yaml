@@ -1,0 +1,131 @@
+# ===================================================================
+# config.yaml : the settings of every experiment (change them here and nowhere else)
+# Never use tab characters in this file, only spaces. Every value is explained in README.md, section 9.
+# ===================================================================
+
+embedder:
+  kind: sbert                       # sbert = the real one (for the paper) | hashing = fallback for testing the code
+  # all-mpnet-base-v2 (110M, dim 768) replaces all-MiniLM-L6-v2 (22M, dim 384): the content score of Stage 2 is
+  # built on this encoder, and on the indirect channel it was the weakest part of the system.  Baseline B2 reads
+  # the same encoder, so the comparison with it is unchanged; B3a/B3b/B3c bring their own models and are untouched.
+  model_name: sentence-transformers/all-mpnet-base-v2
+  allow_fallback: false
+
+data:
+  source: real                      # real = the real data in data_raw/ | synthetic = fake data for testing the code
+  raw_dir: data_raw
+  local_dir: data_local
+  bipia_tasks: [email, table]
+  english_only: true                # keep English text only (drops e.g. the German in deepset before splitting)
+  dedup: false                      # true = de-duplicated splits + leak gate (fresh seeds 20-24 only); false = splits of the first final run
+  use_tasktracker: true             # false = skip TaskTracker (if the files are not built yet)
+  tasktracker_max_rows: 4000        # rows read per split (the full set is very large)
+
+# Development seeds, whose test split has been inspected and which can therefore no longer serve as a held-out set:
+#   0-4  the first design round
+#   5-9  the baseline fairness round (per-channel guard scoring, session-normalised baselines, B1t, B3b)
+#   0-2  the three rounds that chose how a public guard model is used as the content score (results/dev/guard-score-design/)
+#   10-14  the first reported run, then a second design round (both-channel guard score: rejected by the rule in
+#          results/dev/PREREGISTERED_selection.md; the system is the one of the first run)
+# The reported run uses five splits that nothing in the design has ever been chosen on.
+seeds: [15, 16, 17, 18, 19]         # the "five random splits" of the paper (held out: nothing has been chosen on them)
+
+chunk:
+  max_chars: 600
+  min_chars: 150
+
+bank:                               # attack bank (built from dev only)
+  n_clusters: 8                     # number of attack families (k-means)
+  n_holdout: 2                      # families held out of the bank, to test unseen attacks
+
+stage2:
+  doc_len_threshold: 400            # indirect text longer than this is scored per sentence window
+  window_sents: 2
+  max_windows: 16
+  head_C: 1.0
+  eta: 0.3                          # η = clip bound
+  nu: 0.01
+  nu_fast: 0.001
+  tau_f_min: 0.85
+
+pipeline:
+  W: 5                              # Stage 4 window size
+  k_min: 3
+  gamma_follow: 0.0                 # >0 lets a forwarded direct follow-up nudge R (H3 sweeps it; 0 = as published)
+
+fit:
+  nu: 0.01                          # target FPR for Block (1%)
+  nu_r: 0.05                        # target FPR for Forward-Untrusted (5%)
+  tau_o_quantile: 0.10
+  rho_quantile: 0.90
+  tau_a_quantile: 0.95
+  C_grid: [0.01, 0.1, 1.0, 10.0]
+  n_pass: 2
+  cv_folds: 5
+  n_fit_sessions: 400               # val sessions used to fit (half for Stage 2 and the constants, half for the LR)
+
+prelim:                             # Table VI (choosing the decision model) -- rerun with the bank rebuilt per fold
+  n_repeats: 3
+  n_folds: 5
+  target_fpr: 0.05
+  inputs: old                       # old = f, m, n_imp, n_ai (as in Table VI) | new = s, n_imp, n_ai (the new Stage 2)
+
+h1:
+  n_test_per_kind: 60               # test sessions per kind
+  target_session_fpr: 0.05          # every method is set to at most 5% false positives on benign sessions (on val)
+  # B1t = the regex filter with a tunable score; "+sn" = the same baseline judged within its own session, which
+  # is the cheapest form of the context our pipeline reads and keeps the comparison fair
+  baselines: [B1, B1t, B2, B3a, B3b, B3c, B3a+sn, B3b+sn, B3c+sn, B2+sn]
+  simplified: true                  # also run the system without u, k and tau_a (no measurable effect so far)
+  ext_content: [B3b]                # PIGuard is the strongest per-message detector, so it is the fair content source
+  ext_modes: [ind_win_logit_only]   # run the session layer on top of this public classifier's score as well
+  interactions: true                # also run our own system with a per-channel slope for s, n_imp, n_ai
+
+h2:
+  headline_fpr: 0.05               # the criterion is judged here; 1% is reported next to it (too few benign events to be the headline)
+  n_test_per_subset: 150
+  baselines: [B2, B3a, B3b, B3c]
+  ext_content: [B3b]
+  ext_modes: [ind_win_logit_only]
+
+h3:
+  gamma_follow: [0.1, 0.25, 0.5]    # reference-refinement designs compared with the published gamma = 0
+  target_session_fpr: 0.05          # every design is thresholded to at most 5% false positives on benign val sessions
+  n_cal: 60                         # ordinary benign val sessions used for that thresholding
+  Ns: [1, 3, 5, 10]
+  n_per_N: 60
+  n_topic_change: 120
+  n_narrowing: 120
+  n_probing: 60
+  max_attempts: 10
+  n_reset: 60
+  n_weak: 60
+
+secondary:
+  lambdas: [0.0, 0.1, 0.2, 0.3]
+  n_robust: 200
+
+baselines:
+  promptguard:
+    enabled: true                   # the model is gated on Hugging Face; without access it is skipped automatically
+    model_id: meta-llama/Prompt-Guard-86M
+  protectai:
+    enabled: true                   # public model, no license to accept; skipped automatically if it cannot be loaded
+    model_id: protectai/deberta-v3-base-prompt-injection-v2
+    revision: null
+  piguard:
+    # enabled after reading the repo's custom code (modeling_piguard.py in the model repo on Hugging Face): it only subclasses
+    # DebertaV2ForSequenceClassification and swaps the classifier head -- no file, network or system calls
+    enabled: true
+    model_id: leolee99/PIGuard
+    revision: null
+
+smoke:                              # --smoke : shrink everything so a run finishes in a few minutes
+  seeds: [0]
+  fit: {n_fit_sessions: 120, C_grid: [0.1, 1.0], cv_folds: 3}
+  prelim: {n_repeats: 1, n_folds: 3}
+  h1: {n_test_per_kind: 12}
+  h2: {n_test_per_subset: 30}
+  h3: {Ns: [1, 3], n_per_N: 10, n_topic_change: 20, n_narrowing: 20, n_probing: 10, max_attempts: 5, n_reset: 10, n_cal: 20,
+       n_weak: 10}
+  secondary: {lambdas: [0.0, 0.2], n_robust: 40}

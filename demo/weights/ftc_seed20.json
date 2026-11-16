@@ -1,0 +1,23 @@
+{
+ "file": "ftc_seed20.pt",
+ "bytes": 90899002,
+ "sha256": "6c0b4e26501bbfce080c30a758c573e8d20f9564ee1c0307041caeb3a8de5ee7",
+ "note": "FT-C (all-MiniLM-L6-v2 fine-tuned on the dev split of the seed in the file name)",
+ "parts": [
+  {
+   "name": "ftc_seed20.pt.part1",
+   "bytes": 30299668,
+   "sha256": "86f2c3b77dccb45cb2a41c8d21c5559c3f602535839395c2d0a63ffa4eb23a17"
+  },
+  {
+   "name": "ftc_seed20.pt.part2",
+   "bytes": 30299668,
+   "sha256": "b85ad86c5a2a3bd8dd4ee548e9765d66b06aac07bfddaf48be55a2786888520b"
+  },
+  {
+   "name": "ftc_seed20.pt.part3",
+   "bytes": 30299666,
+   "sha256": "2ccf3ec2ce8e7c362309e4110435374d66a3309b0df428c5a3f7965b6cfcdd31"
+  }
+ ]
+}

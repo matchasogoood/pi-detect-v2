@@ -1,0 +1,2 @@
+Decision-model comparison on the final-run data (followup/run_decision_ft_test.py): fit on the dev direct texts (out-of-fold FT-C scores), test on the test-split direct texts of seeds 20-24, FT-C = the final-run FT-C of each seed. One seed = one fold. Check run after the final run; selects nothing.
+The label 'inputs=new' comes from prelim_decision_model.py and means (s, n_imp, n_ai).

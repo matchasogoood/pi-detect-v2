@@ -1,0 +1,38 @@
+# environment
+.venv/
+__pycache__/
+.cache/
+.ipynb_checkpoints/
+*.pyc
+.pytest_cache/
+.vscode/
+
+# datasets and models (download with scripts/, never commit)
+data_raw/*
+!data_raw/README.md
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# generated outputs
+results/dev/
+results/smoke/
+results/final/
+results/_*/
+demo/cache/
+followup/config_*.yaml
+*.zip
+
+# secrets (never commit)
+.env
+*.token
+*token*.txt
+
+# local machine / editor / OS files
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+pip-freeze*.txt
+requirements-lock*.txt

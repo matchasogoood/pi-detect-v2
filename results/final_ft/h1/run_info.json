@@ -1,0 +1,57 @@
+{
+  "time": "2026-11-16 04:20:31",
+  "config_path": "<project>",
+  "smoke": false,
+  "data_source": "real",
+  "embedder": "sentence-transformers/all-mpnet-base-v2",
+  "embedder_is_fallback": false,
+  "seeds": [
+    20,
+    21,
+    22,
+    23,
+    24
+  ],
+  "world": "World[real] BIPIA ctx train/test=950/150, BIPIA attack cats train/test=15/15, deepset=354 (attacks 140), gandalf=993, notinject=254, KB clusters=10, tasktracker=8000 | BIPIA tasks used: ['email', 'table']; English only: dropped deepset 308, gandalf 7, notinject 85, tasktracker (counted only) 6",
+  "english_only": true,
+  "language_filter": {
+    "deepset": {
+      "before": 662,
+      "kept": 354,
+      "removed": 308
+    },
+    "gandalf": {
+      "before": 1000,
+      "kept": 993,
+      "removed": 7
+    },
+    "notinject": {
+      "before": 339,
+      "kept": 254,
+      "removed": 85
+    },
+    "bipia_contexts": {
+      "before": 1100,
+      "kept": 1100,
+      "removed": 0
+    },
+    "bipia_attacks": {
+      "before": 150,
+      "kept": 150,
+      "removed": 0
+    },
+    "tasktracker (counted only)": {
+      "before": 8000,
+      "kept": 7994,
+      "removed": 6
+    },
+    "mock_kb (counted only)": {
+      "before": 330,
+      "kept": 330,
+      "removed": 0
+    }
+  },
+  "language_filter_backend": "lingua",
+  "python": "3.13.5",
+  "experiment": "H1"
+}

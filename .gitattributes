@@ -1,0 +1,4 @@
+# keep the weight parts byte-exact on every OS
+demo/weights/* binary
+*.pdf binary
+*.png binary

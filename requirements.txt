@@ -1,0 +1,26 @@
+# ===== install with:  pip install -r requirements.txt =====
+# (on a machine without a GPU, a smaller CPU-only torch can be installed first -- see the README, section 3)
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
+matplotlib>=3.7
+pyyaml>=6.0
+tqdm>=4.65
+
+# Sentence-BERT (Stages 2/3/4 and baseline B2)
+sentence-transformers>=2.7
+torch>=2.1
+transformers>=4.40
+
+# downloads the datasets from Hugging Face (deepset, Gandalf, NotInject) and the PromptGuard model
+datasets>=2.18
+huggingface_hub>=0.22
+
+# language identifier: used by the English-only filter (data.english_only) and by scripts/04_language_report.py
+# Pinned so that every machine drops exactly the same texts (the counts in the paper's "Language composition" table
+# come from this version). It needs Python 3.12+; on Python 3.11 install lingua-language-detector==2.1.1 instead.
+lingua-language-detector==2.2.0
+
+# for running the test suite
+pytest>=7.0

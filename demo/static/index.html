@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Behavior-based prompt-injection detector demo</title>
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --ink:#1b1f24; --mute:#667085; --line:#e2e5ea; --soft:#f0f2f5;
+  --ok:#1a7f4b; --ok-bg:#e6f5ec; --warn:#a15c00; --warn-bg:#fff2da; --bad:#b42318; --bad-bg:#fde8e6;
+  --accent:#2f5bea; --accent-bg:#e8edff; --user:#e8edff; --doc:#fff7e0; --accent-solid:#2f5bea; --thumb:#c9ced8; --thumb-h:#aab1be;
+}
+:root[data-theme=dark]{
+  --bg:#111418; --panel:#1a1f26; --ink:#e8ebf0; --mute:#98a2b3; --line:#2b323c; --soft:#222932;
+  --ok:#4cc38a; --ok-bg:#12301f; --warn:#f0b04a; --warn-bg:#3a2a0c; --bad:#ff7b72; --bad-bg:#3b1816;
+  --accent:#8fa8ff; --accent-bg:#26336b; --user:#26336b; --doc:#4a3f14; --accent-solid:#3f63e0; --thumb:#3a4350; --thumb-h:#566173;
+}
+*{box-sizing:border-box}
+/* quiet scrollbars: thin, rounded, colour close to the panel so they do not draw the eye */
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--thumb);border-radius:9px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--thumb-h);background-clip:content-box;border:2px solid transparent}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-corner{background:transparent}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:var(--thumb) transparent}}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+header{flex-wrap:wrap;row-gap:8px}
+header h1{font-size:16px;margin:0;font-weight:650;flex:1 1 auto;min-width:0}
+.demo-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:1px 8px;border-radius:99px;background:var(--accent-bg);color:var(--accent);vertical-align:2px;margin-left:4px}
+header #lang,header .btn{flex:none;white-space:nowrap}      /* the language toggle and buttons never shrink; the header wraps instead */
+#lang button{white-space:nowrap}
+header .sub{color:var(--mute);font-size:12px;flex:0 1 auto;min-width:0}
+header .sp{flex:0 0 0}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 10px;border-radius:8px;cursor:pointer;font:inherit}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--accent-solid);border-color:var(--accent-solid);color:#fff}
+.btn.primary:disabled{opacity:.5;cursor:default}
+#banner{display:none;background:var(--bad);color:#fff;text-align:center;padding:4px;font-weight:700;letter-spacing:.04em}
+main{flex:1;display:grid;grid-template-columns:minmax(0,.85fr) 10px minmax(0,1.45fr) 10px minmax(0,1fr);gap:0;padding:12px;min-height:0}
+.vsplit{cursor:col-resize;position:relative;touch-action:none}
+.vsplit::after{content:"";position:absolute;left:3px;top:35%;bottom:35%;width:4px;border-radius:4px;background:var(--line);transition:background .15s}
+.vsplit:hover::after,.vsplit.drag::after{background:var(--accent)}
+.hsplit{height:10px;cursor:row-resize;position:relative;flex:none;touch-action:none}
+.hsplit::after{content:"";position:absolute;top:3px;left:35%;right:35%;height:4px;border-radius:4px;background:var(--line)}
+.hsplit:hover::after,.hsplit.drag::after{background:var(--accent)}
+body.dragging{user-select:none}
+body.dragging.col{cursor:col-resize}body.dragging.row{cursor:row-resize}
+.note{font-size:12px;color:var(--mute);text-align:center;margin:2px 0 10px}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden;position:relative}
+.col>h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:0;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.col>h2 .sp{flex:1}
+.scroll{flex:1;overflow:auto;padding:12px 14px}
+/* chat */
+.msg{max-width:92%;max-height:230px;overflow:auto;margin:0 0 10px;padding:8px 11px;border-radius:12px;white-space:pre-wrap;word-break:break-word;cursor:pointer;border:1px solid transparent}
+.msg.user{background:var(--user);margin-left:auto}
+.msg.doc{background:var(--doc);border-style:dashed;border-color:var(--line)}
+.msg .tag{display:block;font-size:11px;color:var(--mute);margin-bottom:2px}
+.msg.sel{border-color:var(--accent)}
+.verdict{margin:-4px 0 12px;padding:7px 11px;border-radius:10px;font-size:13px;max-width:92%;cursor:pointer;border:1px solid transparent}
+.verdict.f0{background:var(--ok-bg);color:var(--ok)}
+.verdict.f1{background:var(--warn-bg);color:var(--warn)}
+.verdict.f2{background:var(--bad-bg);color:var(--bad)}
+.verdict b{display:block}
+.verdict small{opacity:.9}
+.composer{border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px;flex:none;overflow:auto;min-height:120px}
+.composer textarea{width:100%;min-height:62px;max-height:none;resize:vertical;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--panel);color:var(--ink);padding:5px 9px;cursor:pointer;font:inherit;font-size:13px}
+.seg button.on{background:var(--accent-solid);color:#fff}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--soft);padding:3px 9px;border-radius:99px;font-size:12px;cursor:pointer;color:var(--ink)}
+.chip:hover{border-color:var(--accent)}
+/* pipeline (SVG diagram) */
+#pipe{padding:6px 8px}
+#kind{width:100%;max-width:100%;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+#samp{flex-wrap:nowrap}
+#samp .btn{white-space:nowrap}
+#pipe svg{width:100%;height:100%;display:block}
+.nd rect{fill:var(--panel);stroke:var(--line);stroke-width:1.4;transition:all .25s}
+.nd text{fill:var(--ink);font-family:inherit}
+.nd .ti{font-size:14px;font-weight:650}
+.nd .su{font-size:10.5px;fill:var(--mute)}
+.nd .re{font-size:11.5px;font-weight:650}
+.nd.c-user rect{fill:var(--user)} .nd.c-doc rect{fill:var(--doc)} .nd.c-gray rect{fill:var(--soft)}
+.nd.c-ok rect{fill:var(--ok-bg)} .nd.c-warn rect{fill:var(--warn-bg)} .nd.c-bad rect{fill:var(--bad-bg)}
+.nd{cursor:pointer;transition:opacity .25s}
+.nd:not(.on):not(.static) rect{opacity:.55}      /* idle nodes: the box fades, the text stays readable */
+.nd:not(.on):not(.static) text{opacity:.85}
+.nd.on,.nd.static{opacity:1}
+.nd.active rect{stroke:var(--accent);stroke-width:3}
+.nd.skipped{opacity:.8} .nd.skipped rect{stroke-dasharray:4 3}
+.nd.focus rect{stroke:var(--accent);stroke-width:2.4}
+.nd .re.ok{fill:var(--ok)} .nd .re.warn{fill:var(--warn)} .nd .re.bad{fill:var(--bad)}
+.nd.hit rect{stroke-width:2.6}
+.nd.hit.ok rect{stroke:var(--ok)} .nd.hit.warn rect{stroke:var(--warn)} .nd.hit.bad rect{stroke:var(--bad)}
+.ed{fill:none;stroke:var(--mute);stroke-width:1.5;opacity:.6;transition:all .25s}
+.ed.red{stroke:var(--bad)} .ed.dash{stroke-dasharray:5 4}
+.ed.on{opacity:1;stroke:var(--accent);stroke-width:3}
+.ed.red.on{stroke:var(--bad)}
+:root[data-theme=dark] .ed{opacity:.85}
+:root[data-theme=dark] .nd rect{stroke:#4a5463}
+:root[data-theme=dark] .nd .su{fill:#b5bdcb}
+.elab{font-size:10.5px;font-style:italic;fill:var(--mute)} .elab.red{fill:var(--bad)}
+/* numbers */
+.card{border:1px solid var(--line);border-radius:10px;margin:0 0 10px;overflow:hidden}
+.card h3{margin:0;padding:6px 10px;font-size:12px;background:var(--soft);color:var(--mute);display:flex;gap:8px;align-items:center}
+.card.focus{outline:2px solid var(--accent)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:6px 10px;align-items:center}
+.kv .k{color:var(--ink)}
+.kv .k code{background:var(--soft);padding:0 5px;border-radius:5px;font-size:12px;cursor:pointer}
+.kv .k code:hover{background:var(--accent-bg)}
+.kv .k span{color:var(--mute);font-size:12px;margin-left:4px}
+.kv .v{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.kv .v.hot{color:var(--bad)}
+.meter{position:relative;height:8px;background:var(--soft);border-radius:99px;margin:6px 10px 10px}
+.meter .fill{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--accent)}
+.meter .mk{position:absolute;top:-4px;width:2px;height:16px;background:var(--ink);opacity:.75}
+.meter .mk em{position:absolute;top:17px;left:-18px;font-size:10px;font-style:normal;color:var(--mute);white-space:nowrap}
+.contrib{padding:4px 10px 10px}
+.contrib .c{display:grid;grid-template-columns:70px 1fr 48px;gap:6px;align-items:center;font-size:12px;margin-top:3px}
+.contrib .bar{position:relative;height:9px;background:var(--soft);border-radius:4px}
+.contrib .bar i{position:absolute;top:0;bottom:0;border-radius:4px}
+.contrib .bar .mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--mute)}
+.small{font-size:12px;color:var(--mute);padding:4px 10px 8px}
+.quote{font-size:12px;background:var(--soft);padding:6px 8px;border-radius:6px;margin:4px 10px 8px;max-height:70px;overflow:auto;white-space:pre-wrap}
+/* glossary drawer */
+#gloss{position:absolute;inset:0;background:var(--panel);transform:translateX(102%);transition:transform .25s;display:flex;flex-direction:column;z-index:5}
+#gloss.open{transform:none}
+#gloss .top{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);flex:none}
+#gloss .top .t1{display:flex;gap:8px;align-items:center;min-width:0}
+#gloss .top .t1 b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#gloss .top .t1 .btn{flex:none}
+#gloss .top input{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+#v3{position:absolute;left:0;top:0;bottom:0;width:10px;z-index:6}
+#v3::after{left:3px}
+.g-stage{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:14px 0 6px}
+.g-item{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 8px}
+.g-item.hl{outline:2px solid var(--accent)}
+.g-item .h{display:flex;gap:8px;align-items:center}
+.g-item .h code{background:var(--accent-bg);color:var(--accent);padding:1px 7px;border-radius:6px;font-weight:700}
+.g-item .h b{font-weight:600}
+.pill{margin-left:auto;font-size:11px;padding:1px 8px;border-radius:99px;background:var(--soft);color:var(--mute)}
+.g-item p{margin:5px 0 3px}
+.g-item .from{font-size:12px;color:var(--mute)}
+.empty{color:var(--mute);text-align:center;margin-top:40px}
+@media (max-width:1100px){main{padding:8px}.msg{max-width:98%}.card .kv{font-size:12.5px}}
+@media (max-width:760px){main{grid-template-columns:1fr !important;overflow:auto;gap:12px}.vsplit,.hsplit{display:none}.col{min-height:460px}#c2{min-height:min(820px,150vw)}#c1{min-height:560px}#c3{min-height:520px}}
+</style>
+</head>
+<body>
+<div id="banner">STUB DATA - fake numbers for testing the page, not the real system</div>
+<header>
+  <h1>Behavior-based prompt-injection detector <span class="demo-tag">demo</span></h1>
+  <span class="sp"></span>
+  <div class="seg" id="lang" title="Interface language: buttons and the variable glossary (the pipeline and the chat stay in English)"><button data-l="en" class="on">EN</button><button data-l="th">TH</button></div>
+  <button class="btn" id="theme" data-t="theme">Dark / light</button>
+  <button class="btn" id="reset" data-t="reset">New session</button>
+</header>
+<main>
+  <!-- 1 chat -->
+  <section class="col" id="c1">
+    <h2><span data-t="c1">1 &middot; Chat</span> <span class="sp"></span><span style="text-transform:none;letter-spacing:0" data-t="c1sub">what the LLM application sees</span></h2>
+    <div class="scroll" id="chat"><div class="empty" id="chatEmpty" data-t="chatEmpty">Type a message, paste a retrieved document, or click a scenario below to send one example message.</div></div>
+    <div class="hsplit" id="h1" title="Drag to resize the input area. Double-click to reset." data-tt="h1"></div>
+    <div class="composer" id="comp">
+      <div class="chips" id="chips"></div>
+      <div class="row" id="samp"><select id="kind" title="Where the random example comes from: the held-out TEST split of the seed (the system never trained on it)" data-tt="kind">
+        <option value="any" data-t="o_any">Any dataset (random)</option>
+        <option value="direct_attack" title="deepset, Gandalf, held-out attack families" data-tt="o_da_t" data-t="o_da">User msg: attack</option>
+        <option value="direct_benign" title="deepset benign, NotInject, our own trigger-word messages" data-tt="o_db_t" data-t="o_db">User msg: benign</option>
+        <option value="doc_poisoned" title="TaskTracker, BIPIA with an inserted attack, mock knowledge base" data-tt="o_pp_t" data-t="o_pp">Document: poisoned</option>
+        <option value="doc_clean" title="TaskTracker, BIPIA, mock knowledge base, security articles that quote attacks" data-tt="o_pc_t" data-t="o_pc">Document: clean</option>
+      </select><button class="btn" id="rand" data-t="rand">&#127922; Random sample</button></div>
+      <textarea id="txt" placeholder="Type here. Enter sends, Shift+Enter = new line" data-tp="txt"></textarea>
+      <div class="row">
+        <div class="seg" id="chan"><button data-c="direct" class="on" title="Text the user typed" data-tt="ch_d_t" data-t="ch_d">User message</button><button data-c="indirect" title="A document, web page or tool output retrieved by the system" data-tt="ch_i_t" data-t="ch_i">Retrieved document</button></div>
+        <span style="flex:1"></span>
+        <button class="btn primary" id="send" data-t="send">Send</button>
+      </div>
+    </div>
+  </section>
+  <div class="vsplit" id="v1" title="Drag to resize. Double-click to reset." data-tt="drag"></div>
+  <!-- 2 pipeline -->
+  <section class="col" id="c2">
+    <h2>2 &middot; Pipeline <span class="sp"></span><span id="ms" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="scroll" id="pipe"></div>
+  </section>
+  <div class="vsplit" id="v2" title="Drag to resize. Double-click to reset." data-tt="drag"></div>
+  <!-- 3 numbers -->
+  <section class="col" id="c3">
+    <h2><span data-t="c3">3 &middot; Numbers</span> <span class="sp"></span><button class="btn" id="gbtn" style="text-transform:none;letter-spacing:0" data-t="gbtn">What are these variables?</button></h2>
+    <div class="scroll" id="nums"><div class="empty" data-t="numsEmpty">The values computed for the selected event appear here.</div></div>
+    <div id="gloss">
+      <div class="vsplit" id="v3" title="Drag to resize this panel. Double-click to reset." data-tt="drag3"></div>
+      <div class="top"><div class="t1"><b data-t="gtitle" data-tt="gtitle_t" title="Variables: what they mean and where they come from">Variables: what they mean</b><button class="btn" id="gclose" data-t="close">Close</button></div><input id="gq" placeholder="Search (e.g. CUSUM, tau)" data-tp="gq"></div>
+      <div class="scroll" id="gbody"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const fmt = (v, d=3) => (v===null||v===undefined||Number.isNaN(v)) ? "-" : (typeof v==="number" ? v.toFixed(d) : String(v));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let sid=null, cfg=null, gloss=null, examples=null, channel="direct", busy=false, events=[], selected=-1, playing=false;
+const ACT = ["Forwarded","Forwarded as untrusted data","Blocked"];
+
+async function api(path, body){
+  const r = await fetch(path, body===undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const j = await r.json(); if(!r.ok) throw new Error(j.error||r.statusText); return j;
+}
+async function init(){
+  cfg = await api("/api/config"); gloss = await api("/api/glossary"); examples = await api("/api/examples");
+  $(".demo-tag").title = cfg.system + " | seed " + cfg.seed;   // not shown in the header; hover the DEMO tag to see it
+  if(cfg.stub) $("#banner").style.display="block";
+  buildChips(); buildGloss(); await newSession(); renderPipe();
+}
+async function newSession(){
+  sid = (await api("/api/new", {})).session; events=[]; selected=-1; queues={};
+  $("#chat").innerHTML='<div class="empty" id="chatEmpty" data-t="chatEmpty">'+tr("chatEmpty")+'</div>';
+  $("#nums").innerHTML='<div class="empty" data-t="numsEmpty">'+tr("numsEmpty")+'</div>';
+  $("#ms").textContent=""; renderPipe();
+}
+function buildChips(){
+  const box=$("#chips"); box.innerHTML="";
+  examples.scenarios.forEach(s=>{ const b=document.createElement("button"); b.className="chip"; b.textContent="▶ "+(lang==="th"&&s.title_th?s.title_th:s.title); b.title=(lang==="th"&&s.blurb_th?s.blurb_th:s.blurb); b.onclick=()=>playScenario(s); box.appendChild(b); });
+}
+const ROLE={instruction:"user task",followup:"user follow-up",doc:"retrieved document",bridge:"slightly off-topic chunk",attack:"injected instruction",benign_turn:"benign turn"};
+let queues={};   // per-kind pieces still to send for the multi-chunk scenarios; cleared by "New session"
+const isUser=st=>st.channel==="direct";
+function pickOne(kind, steps){
+  const lastIdx=(f)=>{ for(let i=steps.length-1;i>=0;i--) if(f(steps[i])) return steps[i]; return null; };
+  const first=(f)=>steps.find(f)||null;
+  if(kind==="benign")  return first(st=>isUser(st)&&st.label!=="attack") || steps[0];
+  if(kind==="direct")  return lastIdx(st=>isUser(st)&&st.label==="attack") || lastIdx(isUser) || steps[steps.length-1];
+  if(kind==="doc")     return lastIdx(st=>!isUser(st)&&st.label==="attack") || lastIdx(st=>!isUser(st)) || steps[steps.length-1];
+  if(kind==="topic-change") return first(st=>st.role==="switch") || lastIdx(isUser) || steps[steps.length-1];
+  return steps[steps.length-1];
+}
+// One click = one message, sent into the CURRENT session (only "New session" starts a new one).
+async function playScenario(s){
+  if(busy||playing) return; playing=true;
+  try{
+    let items=[], sc=null;
+    if(s.id==="split"||s.id==="drift"){
+      if(!(queues[s.id]&&queues[s.id].length)){
+        sc=await api("/api/scenario?kind="+encodeURIComponent(s.id));
+        const parts=sc.steps.filter(st=>!isUser(st));
+        queues[s.id]=parts.length?parts:sc.steps.slice(1);
+        queues[s.id].stub=!!sc.stub;
+      }
+      items=[queues[s.id].shift()];
+    }else{
+      sc=await api("/api/scenario?kind="+encodeURIComponent(s.id));
+      items=[pickOne(s.id, sc.steps)];
+    }
+    // a retrieved chunk needs a user task to be judged against: if the session has none yet, send the scenario's task first
+    const needsTask=items[0] && !isUser(items[0]) && !events.some(e=>e&&e.channel==="direct");
+    if(needsTask){
+      if(!sc) sc=await api("/api/scenario?kind="+encodeURIComponent(s.id));
+      const t=sc.steps.find(isUser); if(t) items.unshift(t);
+    }
+    for(const st of items){
+      if(!st) continue;
+      await send(st.text, st.channel, {dataset:(ROLE[st.role]||st.role||"")+(sc&&sc.stub?" (stub)":""), label:st.label}, st.source);
+      await sleep(300);
+    }
+  }catch(err){ alert("Scenario failed: "+err.message); }
+  playing=false;
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+/* ---------- chat ---------- */
+function addMsg(text, ch, idx, meta){
+  $("#chatEmpty")?.remove();
+  const d=document.createElement("div"); d.className="msg "+(ch==="direct"?"user":"doc"); d.dataset.i=idx;
+  d.innerHTML='<span class="tag">'+(ch==="direct"?"You (user message)":"Retrieved document (data, not instructions)")+(meta?' &middot; '+esc(meta.dataset)+' &middot; dataset label: <b>'+esc(meta.label)+'</b>':'')+'</span>'+esc(text);
+  d.onclick=()=>select(idx); $("#chat").appendChild(d); $("#chat").scrollTop=1e9; return d;
+}
+function verdictText(e){
+  const d=e.decision, s2=e.stage2;
+  if(d.action===2){
+    if(s2.bank_fast_path) return "Matches a known attack (attack-bank fast path).";
+    if(s2.content_block_path) return "The content model (FT-C) scored it "+fmt(s2.ftc_score,4)+" > "+fmt(s2.tau_ft,4)+" (content block path).";
+    return "Decision model: p = "+fmt(d.p)+" > "+fmt(d.t_blk)+(d.reasons.length?"  | "+d.reasons.join(", "):"");
+  }
+  if(d.action===1) return e.channel==="indirect" ? "Passed on, but marked as retrieved data (p = "+fmt(d.p)+")." : "p = "+fmt(d.p)+" is above the review threshold.";
+  return "p = "+fmt(d.p)+" is below the review threshold.";
+}
+function addVerdict(e, idx){
+  const a=e.decision.action, d=document.createElement("div");
+  d.className="verdict f"+a; d.dataset.i=idx;
+  d.innerHTML="<b>"+(a===2?"⛔ ":a===1?"⚠ ":"✅ ")+ACT[a]+"</b><small>"+esc(verdictText(e))+"</small>";
+  d.onclick=()=>select(idx); $("#chat").appendChild(d); $("#chat").scrollTop=1e9;
+}
+
+/* ---------- pipeline (diagram of the paper) ---------- */
+const NS="http://www.w3.org/2000/svg";
+const ND={ // id:[x,y,w,h,title,sub,cls]
+ user:[20,4,170,54,"User prompt","direct channel","c-user"],
+ retr:[250,4,190,54,"Retrieved content","indirect channel","c-doc"],
+ icpt:[130,90,230,56,"Text interceptor","tags channel + session",""],
+ s1:[110,176,270,64,"Stage 1: Canonicalize","scoring copy; rule flag f, obfuscation g",""],
+ s2:[110,272,270,72,"Stage 2: Override check","content scorer (FT-C) + bank fast path + content block path",""],
+ bank:[430,281,150,56,"Attack bank","known attacks","c-gray"],
+ dir:[10,380,190,72,"Direct channel","Stage 4: a, k, u; a new task sets R","c-user"],
+ s3:[262,380,190,72,"Stage 3: Relevance","is this chunk related to the user's latest request?","c-doc"],
+ s4:[262,478,190,72,"Stage 4: Behavior","is relevance drifting down? was this source blocked?","c-doc"],
+ ses:[472,380,118,170,"Session state","R, trust, window H, a, k, u","c-gray"],
+ dm:[110,590,270,64,"Decision (LR)","+ reason",""],
+ f0:[10,700,170,50,"Forward","","c-ok"],
+ f1:[195,700,190,50,"Forward","marked untrusted","c-warn"],
+ f2:[400,700,180,50,"Block & log","","c-bad"]
+};
+const ED={ // id:[path, class, label, lx, ly, anchor]
+ e1:["M105 58 L215 90"],
+ e2:["M345 58 L275 90"],
+ e3:["M245 146 L245 176"],
+ e4:["M245 240 L245 272"],
+ e5:["M430 309 L380 309"],
+ e6:["M170 344 L120 380","","direct",105,366],
+ e7:["M215 344 L215 590","red","fast path /",209,500,"end"],
+ e8:["M330 344 L350 380","","indirect",352,366],
+ e9:["M357 452 L357 478"],
+ e10:["M105 452 L105 510 L165 590"],
+ e11:["M357 550 L357 570 L340 590"],
+ e12:["M452 416 L472 416","dash"],
+ e13:["M452 514 L472 514","dash"],
+ e14:["M60 452 L60 568 L531 568 L531 550","dash","only a direct new task sets R",250,563],
+ e15:["M170 654 L110 700"],
+ e16:["M245 654 L290 700"],
+ e17:["M330 654 L480 700","red"]
+};
+let NODE={}, EDGE={};
+function mk(tag,attrs,parent){const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); parent&&parent.appendChild(e); return e;}
+function wrap(txt,max){const w=txt.split(" "),L=[];let c="";w.forEach(x=>{if((c+" "+x).trim().length>max){L.push(c);c=x}else c=(c+" "+x).trim()});if(c)L.push(c);return L;}
+function renderPipe(){
+  const box=$("#pipe"); box.innerHTML=""; NODE={}; EDGE={};
+  const svg=mk("svg",{viewBox:"0 0 600 764",preserveAspectRatio:"xMidYMid meet"},box);
+  const defs=mk("defs",{},svg);
+  [["ar","var(--mute)"],["arr","var(--bad)"]].forEach(([id,c])=>{const m=mk("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"},defs);mk("path",{d:"M0 0 L10 5 L0 10 z",fill:c},m);});
+  for(const id in ED){const [d,cl,lab,lx,ly,anc]=ED[id]; const p=mk("path",{d,class:"ed "+(cl||""),"marker-end":cl==="red"?"url(#arr)":"url(#ar)"},svg); EDGE[id]=p;
+    if(lab){const t=mk("text",{x:lx,y:ly,"text-anchor":anc||"start",class:"elab "+(cl==="red"?"red":"")},svg); t.textContent=lab; if(id==="e7"){const t2=mk("text",{x:lx,y:ly+11,"text-anchor":"end",class:"elab red"},svg); t2.textContent="block path";}}}
+  for(const id in ND){const [x,y,w,h,ti,su,cl]=ND[id]; const g=mk("g",{class:"nd "+cl,"data-id":id},svg); NODE[id]=g;
+    mk("rect",{x,y,width:w,height:h,rx:9},g);
+    const t=mk("text",{x:x+w/2,y:y+19,"text-anchor":"middle",class:"ti"},g); t.textContent=ti;
+    const lines=wrap(su,Math.floor(w/5.6)); lines.slice(0,2).forEach((l,i)=>{const s=mk("text",{x:x+w/2,y:y+33+i*12,"text-anchor":"middle",class:"su"},g); s.textContent=l;});
+    mk("text",{x:x+w/2,y:y+h-8,"text-anchor":"middle",class:"re"},g);
+    g.onclick=()=>focusNums(id);}
+}
+function resetPipe(){ renderPipe(); }
+const OUTID={0:"f0",1:"f1",2:"f2"};
+function plan(e){
+  const s2=e.stage2,d=e.decision,direct=e.channel==="direct",early=s2.bank_fast_path||s2.content_block_path,F=d.features;
+  const cls=x=>x; const res={}; const steps=[];
+  const src=direct?"user":"retr";
+  res[src]=["on",direct?"typed by the user":"retrieved by the system","ok"];
+  res.icpt=["on","channel: "+e.channel+" | turn "+e.turn,""];
+  const s1=e.stage1, flags=(s1.rule_flag>0||s1.obf_flag);
+  res.s1=["on","f = "+fmt(s1.rule_flag,2)+" | g = "+s1.obf_flag,flags?"warn":"ok"];
+  res.s2=["on",early?(s2.bank_fast_path?"BLOCK: bank fast path":"BLOCK: FT-C "+fmt(s2.ftc_score,4)+" > "+fmt(s2.tau_ft,4)):"s = FT-C "+fmt(s2.ftc_score,4)+" | m = "+fmt(s2.views[0].m,2),early?"bad":(s2.s>0.5?"warn":"ok")];
+  res.bank=["on","m = "+fmt(s2.views[0].m,2),""];
+  const s4=e.stage4,s3=e.stage3,sa=e.state_after;
+  let path=[src,"icpt","s1","s2"], edges=[direct?"e1":"e2","e3","e4"];
+  if(early){ edges.push("e7"); path.push("dm"); res.dm=["on","fast path: Decision not needed","bad"];
+    ["dir","s3","s4"].forEach(k=>res[k]=["skipped","skipped",""]); }
+  else if(direct){ edges.push("e6","e10"); path.push("dir","dm");
+    res.dir=["on","a = "+fmt(s4.a,2)+" | k = "+fmt(F.k,0)+" | u = "+fmt(F.u,0)+(e.decision.reference_updated?" | R set":""),s4.a>1?"warn":"ok"];
+    ["s3","s4"].forEach(k=>res[k]=["skipped","n/a (direct)",""]);
+    res.dm=["on","p = "+fmt(d.p,2),d.action===2?"bad":d.action===1?"warn":"ok"]; }
+  else { edges.push("e8","e9","e11"); path.push("s3","s4","dm");
+    res.s3=["on","r = "+fmt(s3.r,2)+(s3.has_reference?"":" (no R yet)"),s3.r<0.2?"warn":"ok"];
+    res.s4=["on","a = "+fmt(s4.a,2)+" | o = "+fmt(s4.o,2)+" | d = "+fmt(s4.delta,2),(s4.o>0.4||s4.delta>0.3)?"warn":"ok"];
+    res.dir=["skipped","n/a (retrieved)",""];
+    res.dm=["on","p = "+fmt(d.p,2),d.action===2?"bad":d.action===1?"warn":"ok"]; }
+  const out=OUTID[d.action]; path.push(out); edges.push({0:"e15",1:"e16",2:"e17"}[d.action]);
+  res.ses=["on","R: "+(sa.has_R?(sa.trust?"set, trusted":"set, low trust"):"not set")+"\na = "+fmt(sa.a,2)+"\nblocked: "+Object.keys(sa.blocked_sources).length,""];
+  res[out]=["on","",["ok","warn","bad"][d.action]];
+  return {path,edges,res,out};
+}
+function paintNode(id,r,final){
+  const [st,txt,cl]=r; const g=NODE[id]; if(!g) return;
+  g.classList.remove("active","on","skipped","static","hit","ok","warn","bad");
+  g.classList.add(st==="skipped"?"skipped":"on"); if(cl){ g.classList.add(cl); if(["f0","f1","f2"].includes(id)) g.classList.add("hit"); }
+  const t=g.querySelector(".re"); t.setAttribute("class","re "+(cl||"")); t.textContent="";
+  const parts=String(txt||"").split("\n"), x=t.getAttribute("x");
+  parts.forEach((s,i)=>{ const ts=document.createElementNS(NS,"tspan"); ts.setAttribute("x",x); ts.setAttribute("dy",i===0?String(-(parts.length-1)*13):"13"); ts.textContent=s; t.appendChild(ts); });
+}
+function showStatic(e){
+  renderPipe(); const p=plan(e);
+  Object.entries(p.res).forEach(([k,v])=>paintNode(k,v)); p.edges.forEach(k=>EDGE[k]?.classList.add("on"));
+  if(p.path.includes("s2")) EDGE.e5?.classList.add("on");
+}
+async function animate(e){
+  renderPipe(); const p=plan(e);
+  for(let i=0;i<p.path.length;i++){
+    const id=p.path[i];
+    if(i>0) EDGE[p.edges[i-1]]?.classList.add("on");
+    NODE[id]?.classList.add("active"); await sleep(430);
+    NODE[id]?.classList.remove("active"); paintNode(id,p.res[id]);
+    if(id==="s2"){ EDGE.e5?.classList.add("on"); paintNode("bank",p.res.bank); }
+  }
+  Object.entries(p.res).forEach(([k,v])=>{ if(!p.path.includes(k)&&k!=="bank") paintNode(k,v); });
+  paintNode("ses",p.res.ses);
+}
+
+/* ---------- numbers ---------- */
+function row(sym,name,val,key,hot){ return '<div class="k"><code data-g="'+esc(key||sym)+'">'+esc(sym)+'</code><span>'+esc(name)+'</span></div><div class="v'+(hot?' hot':'')+'">'+val+'</div>'; }
+function meter(v,lo,hi,marks){
+  const mx=Math.max(1,v,...(marks||[]).map(m=>m[0])), pct=x=>Math.max(0,Math.min(100,100*x/mx));
+  return '<div class="meter"><div class="fill" style="width:'+pct(v)+'%"></div>'+(marks||[]).map(m=>'<div class="mk" style="left:'+pct(m[0])+'%"><em>'+m[1]+'</em></div>').join("")+'</div>';
+}
+function renderNums(e){
+  const s1=e.stage1,s2=e.stage2,s3=e.stage3,s4=e.stage4,d=e.decision,sa=e.state_after,F=d.features;
+  let h='';
+  h+='<div class="card" id="n-s1"><h3>Stage 1 &middot; Canonicalize</h3><div class="kv">'+row("f","rule flag",fmt(s1.rule_flag,2),"f")+row("g","obfuscation flag",s1.obf_flag,"g")+'</div>'
+    +(s1.canonical?'<div class="small">canonical copy:</div><div class="quote">'+esc(s1.canonical)+'</div>':'')+'</div>';
+  h+='<div class="card" id="n-s2"><h3>Stage 2 &middot; Override check</h3><div class="kv">'
+    +row("FT-C","content score (this is s)",fmt(s2.ftc_score,4),"FT-C",s2.content_block_path)+'</div>'+meter(s2.ftc_score,0,1,[[s2.tau_ft,"&tau;_ft"]])
+    +'<div class="kv">'+row("tau_ft","content block threshold",fmt(s2.tau_ft,4),"tau_ft")+row("m","bank similarity",fmt(s2.views[0].m),"m",s2.bank_fast_path)+row("q","head probability",fmt(s2.views[0].q),"q")
+    +row("s_ours","our own fused score (not used)",fmt(s2.s_ours),"s_ours")+row("windows","windows scored",s2.n_windows,"q")+'</div>'
+    +'<div class="small">nearest attack in the bank:</div><div class="quote">'+esc(s2.nearest_bank||"-")+'</div>'
+    +(s2.views.length>1?'<div class="small">second view (canonical copy) was also scored: m = '+fmt(s2.views[1].m)+', s = '+fmt(s2.views[1].s)+'</div>':'')+'</div>';
+  h+='<div class="card" id="n-s3"><h3>Stage 3 &middot; Relevance '+(s3.ran?'':'(not run)')+'</h3>';
+  if(s3.ran){ h+='<div class="kv">'+row("r","relevance to R",fmt(s3.r),"r",s3.r<0.2)+row("R","reference available",s3.has_reference?(s3.trusted_reference?"yes, trusted":"yes, low trust"):"no","R")+'</div><div class="small">most instruction-like window (omega*):</div><div class="quote">'+esc(s3.top_window||"")+'</div>'; }
+  else h+='<div class="small">Stage 3 runs on retrieved text only, and only when the event was not blocked earlier.</div>';
+  h+='</div>';
+  h+='<div class="card" id="n-s4"><h3>Stage 4 &middot; Session behavior</h3><div class="kv">'
+    +row("a","CUSUM suspicion",fmt(s4.a),"a",s4.a>1)+row("o","off-task share",fmt(s4.o),"o")+row("fbar","mean rule flags",fmt(s4.fbar),"fbar")+row("delta","relevance decline",fmt(s4.delta),"delta")
+    +row("u","blocked-source count",fmt(F.u,0),"u")+row("k","task resets",fmt(F.k,0),"k")+row("h","no-history flag",fmt(s4.h,0),"h")+row("z","no trusted reference",fmt(s4.z,0),"z")+'</div></div>';
+  h+='<div class="card" id="n-dm"><h3>Decision module</h3><div class="kv">'+row("p","injection probability",fmt(d.p),"p",d.action===2)+'</div>'
+    +meter(d.p,0,1,[[d.t_rev,"t_rev"],[d.t_blk,"t_blk"]])+'<div class="kv">'+row("t_rev","review threshold",fmt(d.t_rev),"t_rev")+row("t_blk","block threshold",fmt(d.t_blk),"t_blk")+'</div>';
+  const keys=Object.keys(d.contributions||{}).filter(k=>k!=="_intercept");
+  if(keys.length){
+    const mx=Math.max(0.5,...keys.map(k=>Math.abs(d.contributions[k])));
+    h+='<div class="small">how each feature moved the log-odds (relative to a typical event):</div><div class="contrib">'
+     +keys.sort((a,b)=>Math.abs(d.contributions[b])-Math.abs(d.contributions[a])).map(k=>{const v=d.contributions[k], w=50*Math.abs(v)/mx;
+        return '<div class="c"><code data-g="'+esc(k.replace(":ind",""))+'" style="cursor:pointer">'+esc(k)+'</code><div class="bar"><span class="mid"></span><i style="'+(v>=0?'left:50%;background:var(--bad)':'right:50%;background:var(--ok)')+';width:'+w+'%"></i></div><span>'+(v>=0?'+':'')+v.toFixed(2)+'</span></div>';}).join("")+'</div>';
+  } else h+='<div class="small">The decision model was not needed: the event was blocked in Stage 2.</div>';
+  h+='</div>';
+  h+='<div class="card" id="n-st"><h3>Session state after this event</h3><div class="kv">'
+    +row("R","reference set",sa.has_R?"yes":"no","R")+row("trust","reference trusted",sa.trust?"yes":"no","z")+row("a","CUSUM",fmt(sa.a),"a")+row("window","retrieved chunks in window",sa.window,"o")+'</div>'
+    +'<div class="small">blocked sources: '+(Object.keys(sa.blocked_sources).length?esc(Object.keys(sa.blocked_sources).join(", ")):"none")+'</div></div>';
+  $("#nums").innerHTML=h;
+  $("#nums").querySelectorAll("[data-g]").forEach(c=>c.onclick=()=>openGloss(c.dataset.g));
+}
+function focusNums(id){
+  document.querySelectorAll(".nd").forEach(x=>x.classList.remove("focus")); document.querySelectorAll(".card").forEach(x=>x.classList.remove("focus"));
+  const m={s1:"n-s1",s2:"n-s2",bank:"n-s2",s3:"n-s3",s4:"n-s4",dir:"n-s4",dm:"n-dm",f0:"n-dm",f1:"n-dm",f2:"n-dm",ses:"n-st"}[id]; NODE[id]?.classList.add("focus");
+  const c=m&&$("#"+m); if(c){ c.classList.add("focus"); c.scrollIntoView({behavior:"smooth",block:"nearest"}); }
+}
+
+/* ---------- language: EN (default) / TH. Thai covers the buttons, headings, hints and the variable glossary;
+   the pipeline diagram, the chat texts, the verdicts and the numbers stay in English. Not remembered between visits. ---------- */
+let lang="en"; const TH=()=>lang==="th";
+const GL=(i,f)=>(TH()&&i[f+"_th"])?i[f+"_th"]:i[f];
+const TXT={
+ en:{theme:"Dark / light",reset:"New session",c1:"1 · Chat",c1sub:"what the LLM application sees",c3:"3 · Numbers",gbtn:"What are these variables?",
+  chatEmpty:"Type a message, paste a retrieved document, or click a scenario below to send one example message.",numsEmpty:"The values computed for the selected event appear here.",
+  o_any:"Any dataset (random)",o_da:"User msg: attack",o_db:"User msg: benign",o_pp:"Document: poisoned",o_pc:"Document: clean",
+  o_da_t:"deepset, Gandalf, held-out attack families",o_db_t:"deepset benign, NotInject, our own trigger-word messages",o_pp_t:"TaskTracker, BIPIA with an inserted attack, mock knowledge base",o_pc_t:"TaskTracker, BIPIA, mock knowledge base, security articles that quote attacks",
+  kind:"Where the random example comes from: the held-out TEST split of the seed (the system never trained on it)",rand:"🎲 Random sample",txt:"Type here. Enter sends, Shift+Enter = new line",
+  ch_d:"User message",ch_i:"Retrieved document",ch_d_t:"Text the user typed",ch_i_t:"A document, web page or tool output retrieved by the system",send:"Send",
+  h1:"Drag to resize the input area. Double-click to reset.",drag:"Drag to resize. Double-click to reset.",drag3:"Drag to resize this panel. Double-click to reset.",
+  gtitle:"Variables: what they mean",gtitle_t:"Variables: what they mean and where they come from",close:"Close",gq:"Search (e.g. CUSUM, tau)",source:"Source:",fixed:"Fixed values of this run",
+  lang:"Interface language: buttons and the variable glossary (the pipeline and the chat stay in English)"},
+ th:{theme:"มืด / สว่าง",reset:"เริ่ม session ใหม่",c1:"1 · แชท",c1sub:"สิ่งที่แอป LLM มองเห็น",c3:"3 · ตัวเลข",gbtn:"ตัวแปรเหล่านี้คืออะไร?",
+  chatEmpty:"พิมพ์ข้อความ วางเอกสารที่ดึงมา หรือกดปุ่ม scenario ด้านล่างเพื่อส่งตัวอย่างหนึ่งข้อความ",numsEmpty:"ค่าที่คำนวณได้ของ event ที่เลือกจะแสดงที่นี่",
+  o_any:"ทุก dataset (สุ่ม)",o_da:"ข้อความผู้ใช้: โจมตี",o_db:"ข้อความผู้ใช้: ปกติ",o_pp:"เอกสาร: ถูกฝังคำสั่ง",o_pc:"เอกสาร: สะอาด",
+  o_da_t:"deepset, Gandalf, กลุ่มการโจมตีที่กันไว้ไม่ให้เห็นตอนฝึก",o_db_t:"deepset ฝั่งปกติ, NotInject, ข้อความที่มีคำกระตุ้นซึ่งเราเขียนเอง",o_pp_t:"TaskTracker, BIPIA ที่ใส่การโจมตี, ฐานความรู้จำลอง",o_pc_t:"TaskTracker, BIPIA, ฐานความรู้จำลอง, บทความความปลอดภัยที่อ้างการโจมตี",
+  kind:"แหล่งที่มาของตัวอย่างสุ่ม: TEST split ของ seed ที่กันไว้ (ระบบไม่เคยเห็นตอนฝึก)",rand:"🎲 สุ่มตัวอย่าง",txt:"พิมพ์ที่นี่ กด Enter เพื่อส่ง, Shift+Enter = ขึ้นบรรทัดใหม่",
+  ch_d:"ข้อความผู้ใช้",ch_i:"เอกสารที่ดึงมา",ch_d_t:"ข้อความที่ผู้ใช้พิมพ์เอง",ch_i_t:"เอกสาร เว็บเพจ หรือผลลัพธ์ของเครื่องมือที่ระบบดึงมา",send:"ส่ง",
+  h1:"ลากเพื่อปรับความสูงของช่องพิมพ์ ดับเบิลคลิกเพื่อรีเซ็ต",drag:"ลากเพื่อปรับขนาด ดับเบิลคลิกเพื่อรีเซ็ต",drag3:"ลากเพื่อปรับขนาดช่องนี้ ดับเบิลคลิกเพื่อรีเซ็ต",
+  gtitle:"ตัวแปร: ความหมาย",gtitle_t:"ตัวแปร: ความหมายและที่มาของแต่ละตัว",close:"ปิด",gq:"ค้นหา (เช่น CUSUM, tau)",source:"ที่มา:",fixed:"ค่าคงที่ของการรันนี้",
+  lang:"ภาษาของหน้าจอ: ปุ่ม หัวข้อ และคำอธิบายตัวแปร (pipeline และแชทยังเป็นภาษาอังกฤษ)"}};
+const tr=k=>(TXT[lang]&&TXT[lang][k])||TXT.en[k];
+function applyLang(){
+  document.documentElement.lang=lang;
+  document.querySelectorAll("[data-t]").forEach(e=>{ e.textContent=tr(e.dataset.t); });
+  document.querySelectorAll("[data-tt]").forEach(e=>{ e.title=tr(e.dataset.tt); });
+  document.querySelectorAll("[data-tp]").forEach(e=>{ e.placeholder=tr(e.dataset.tp); });
+  $("#lang").title=tr("lang"); document.querySelectorAll("#lang button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+  if(examples) buildChips();
+  if(gloss) buildGloss();          // keeps the search text; re-renders in the chosen language
+}
+document.addEventListener("click",ev=>{ const b=ev.target.closest("#lang button"); if(b){ lang=b.dataset.l; applyLang(); } });
+
+/* ---------- glossary ---------- */
+function buildGloss(){
+  const q=($("#gq").value||"").toLowerCase(); let h='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">'
+   +Object.entries(TH()?gloss.provenance_legend_th:gloss.provenance_legend).map(([k,v])=>'<span class="pill" style="margin:0" title="'+esc(v)+'">'+k+': '+esc(v)+'</span>').join("")+'</div>';
+  gloss.groups.forEach(g=>{
+    const items=g.items.filter(i=>!q||(i.sym+" "+i.key+" "+GL(i,"name")+" "+GL(i,"text")+" "+GL(i,"from")).toLowerCase().includes(q)); if(!items.length) return;
+    h+='<div class="g-stage">'+esc(TH()&&g.stage_th?g.stage_th:g.stage)+'</div>';
+    items.forEach(i=>{ h+='<div class="g-item" data-k="'+esc(i.key)+'" data-s="'+esc(i.sym)+'"><div class="h"><code>'+esc(i.sym)+'</code><b>'+esc(GL(i,"name"))+'</b><span class="pill">'+esc(i.src)+'</span></div><p>'+esc(GL(i,"text"))+'</p><div class="from">'+tr("source")+' '+esc(GL(i,"from"))+'</div></div>'; });
+  });
+  if(cfg){ const thr=cfg.thresholds; h+='<div class="g-stage">'+tr("fixed")+'</div><div class="g-item"><div class="from">'+Object.entries(thr).map(([k,v])=>k+' = '+fmt(v)).join(" &nbsp;|&nbsp; ")+'</div></div>'; }
+  $("#gbody").innerHTML=h;
+}
+function openGloss(key){
+  $("#gq").value=""; buildGloss(); $("#gloss").classList.add("open");
+  if(key){ const el=[...document.querySelectorAll(".g-item")].find(x=>x.dataset.k===key||x.dataset.s===key); if(el){ el.classList.add("hl"); el.scrollIntoView({block:"center"}); } }
+}
+
+/* ---------- selection / sending ---------- */
+async function select(i){
+  selected=i; document.querySelectorAll(".msg").forEach(m=>m.classList.toggle("sel",+m.dataset.i===i));
+  const e=events[i]; if(!e) return; $("#ms").textContent=e.ms.toFixed(0)+" ms"; renderNums(e);
+  showStatic(e);
+}
+async function send(text, ch, meta, source){
+  if(busy) return; text=(text||"").trim(); if(!text) return; busy=true; $("#send").disabled=true;
+  const idx=events.length; addMsg(text,ch,idx,meta);
+  try{
+    const e=await api("/api/step",{session:sid,text,channel:ch,source:source||null}); events.push(e);
+    selected=idx; document.querySelectorAll(".msg").forEach(m=>m.classList.toggle("sel",+m.dataset.i===idx));
+    $("#ms").textContent=e.ms.toFixed(0)+" ms"; renderNums(e); await animate(e); addVerdict(e,idx);
+  }catch(err){ const d=document.createElement("div"); d.className="verdict f2"; d.innerHTML="<b>Error</b><small>"+esc(err.message)+"</small>"; $("#chat").appendChild(d); events.push(null); }
+  busy=false; $("#send").disabled=false;
+}
+async function randomSample(){
+  if(busy||playing) return; busy=false;
+  try{
+    const s=await api("/api/sample?kind="+encodeURIComponent($("#kind").value));
+    if(s.channel==="indirect" && s.task && !events.some(e=>e&&e.channel==="direct")){ await send(s.task,"direct",{dataset:s.dataset+" (the user's task)",label:"benign"}); await sleep(300); }
+    await send(s.text,s.channel,s);
+  }catch(err){ alert("Sampling failed: "+err.message); }
+}
+$("#rand").onclick=randomSample;
+$("#send").onclick=()=>{ const t=$("#txt").value; $("#txt").value=""; send(t,channel); };
+$("#txt").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("#send").click(); } });
+$("#chan").querySelectorAll("button").forEach(b=>b.onclick=()=>{ channel=b.dataset.c; $("#chan").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); });
+$("#reset").onclick=()=>{ if(!busy) newSession(); };
+$("#gbtn").onclick=()=>openGloss(null); $("#gclose").onclick=()=>$("#gloss").classList.remove("open"); $("#gq").oninput=buildGloss;
+$("#theme").onclick=()=>{ const r=document.documentElement; r.dataset.theme=r.dataset.theme==="dark"?"light":"dark"; };
+
+/* ---------- resizable panels (drag the bars; double-click resets) ---------- */
+const COLS_DEFAULT=[0.85,1.45,1.0];
+/* panel sizes are NOT remembered: every page load starts from the default layout */
+try{ localStorage.removeItem("pi_cols"); localStorage.removeItem("pi_comp"); }catch(e){}
+function loadLS(k,d){ return d; }
+function saveLS(k,v){}
+function applyCols(c){ const m=$("main"); if(window.innerWidth<=760){ m.style.gridTemplateColumns=""; return; } m.style.gridTemplateColumns="minmax(0,"+c[0]+"fr) 10px minmax(0,"+c[1]+"fr) 10px minmax(0,"+c[2]+"fr)"; }
+let cols=loadLS("pi_cols",COLS_DEFAULT); if(!Array.isArray(cols)||cols.length!==3) cols=COLS_DEFAULT.slice();
+applyCols(cols); window.addEventListener("resize",()=>applyCols(cols));
+function dragCols(handle,i){
+  handle.addEventListener("pointerdown",ev=>{
+    ev.preventDefault(); handle.setPointerCapture(ev.pointerId); handle.classList.add("drag"); document.body.classList.add("dragging","col");
+    const w=[$("#c1"),$("#c2"),$("#c3")].map(e=>e.getBoundingClientRect().width), tot=w[0]+w[1]+w[2], x0=ev.clientX, MIN=170;
+    const mv=e=>{ let d=e.clientX-x0; d=Math.max(MIN-w[i],Math.min(w[i+1]-MIN,d)); const n=w.slice(); n[i]+=d; n[i+1]-=d; cols=n.map(v=>+(3*v/tot).toFixed(4)); applyCols(cols); };
+    const up=()=>{ handle.releasePointerCapture(ev.pointerId); handle.classList.remove("drag"); document.body.classList.remove("dragging","col"); handle.removeEventListener("pointermove",mv); handle.removeEventListener("pointerup",up); saveLS("pi_cols",cols); };
+    handle.addEventListener("pointermove",mv); handle.addEventListener("pointerup",up);
+  });
+  handle.addEventListener("dblclick",()=>{ cols=COLS_DEFAULT.slice(); applyCols(cols); saveLS("pi_cols",cols); });
+}
+dragCols($("#v1"),0); dragCols($("#v2"),1); dragCols($("#v3"),1);   // v3 = left edge of the variables drawer, same bar as v2
+let compH=loadLS("pi_comp",null); const comp=$("#comp");
+function applyComp(){ if(window.innerWidth<=760){ comp.style.height=""; return; } comp.style.height=compH?compH+"px":""; }
+applyComp();
+$("#h1").addEventListener("pointerdown",ev=>{
+  ev.preventDefault(); const h=$("#h1"); h.setPointerCapture(ev.pointerId); h.classList.add("drag"); document.body.classList.add("dragging","row");
+  const y0=ev.clientY, h0=comp.getBoundingClientRect().height, maxH=$("#c1").getBoundingClientRect().height-150;
+  const mv=e=>{ compH=Math.round(Math.max(120,Math.min(maxH,h0-(e.clientY-y0)))); applyComp(); };
+  const up=()=>{ h.releasePointerCapture(ev.pointerId); h.classList.remove("drag"); document.body.classList.remove("dragging","row"); h.removeEventListener("pointermove",mv); h.removeEventListener("pointerup",up); saveLS("pi_comp",compH); };
+  h.addEventListener("pointermove",mv); h.addEventListener("pointerup",up);
+});
+$("#h1").addEventListener("dblclick",()=>{ compH=null; applyComp(); saveLS("pi_comp",null); });
+
+init().catch(e=>{ document.body.insertAdjacentHTML("afterbegin",'<pre style="color:#b42318;padding:16px">'+esc(e.message)+'</pre>'); });
+</script>
+</body>
+</html>

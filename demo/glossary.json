@@ -1,0 +1,321 @@
+{
+ "provenance_legend": {
+  "computed": "computed for every event from the text and the session state",
+  "learned": "learned from the development split of the seed (never from validation or test)",
+  "calibrated": "set on the validation split so that a false-positive budget on benign data is met",
+  "design": "a fixed design choice written down before the experiments"
+ },
+ "groups": [
+  {
+   "stage": "Stage 1 - Canonicalize",
+   "items": [
+    {
+     "sym": "f",
+     "name": "Rule flag",
+     "key": "rule_flag",
+     "src": "computed",
+     "text": "Set when the raw text matches a known override pattern (e.g. \"ignore previous instructions\"). A soft signal that is added to the score, not a verdict.",
+     "from": "regex set in pidetect/rules.py",
+     "name_th": "ธง rule",
+     "text_th": "ตั้งค่าเมื่อข้อความดิบตรงกับรูปแบบการสั่งทับที่รู้จัก (เช่น \"ignore previous instructions\") เป็นสัญญาณอ่อนที่บวกเข้าคะแนน ไม่ใช่คำตัดสิน",
+     "from_th": "ชุด regex ใน pidetect/rules.py"
+    },
+    {
+     "sym": "g",
+     "name": "Obfuscation flag",
+     "key": "obf_flag",
+     "src": "computed",
+     "text": "1 when canonicalization had to change the text (Unicode tricks, homoglyphs, leetspeak, base64/hex/ROT13). Disguising the text is itself suspicious.",
+     "from": "pidetect/canon.py",
+     "name_th": "ธงการพรางข้อความ",
+     "text_th": "เป็น 1 เมื่อขั้น canonicalization ต้องแก้ข้อความ (เทคนิค Unicode, homoglyph, leetspeak, base64/hex/ROT13) การพรางข้อความเองก็น่าสงสัยอยู่แล้ว",
+     "from_th": "pidetect/canon.py"
+    }
+   ],
+   "stage_th": "ด่าน 1 - Canonicalize (ทำให้ข้อความอยู่ในรูปมาตรฐาน)"
+  },
+  {
+   "stage": "Stage 2 - Override check",
+   "items": [
+    {
+     "sym": "m",
+     "name": "Bank similarity",
+     "key": "m",
+     "src": "computed",
+     "text": "Highest cosine similarity between the message embedding and any example in the attack bank. High = looks like a known attack.",
+     "from": "attack bank = clusters of dev-split attacks + hand-written ones; embedder all-MiniLM-L6-v2",
+     "name_th": "ความคล้ายกับ attack bank",
+     "text_th": "ค่า cosine similarity สูงสุดระหว่าง embedding ของข้อความกับตัวอย่างใด ๆ ใน attack bank ค่าสูง = หน้าตาเหมือนการโจมตีที่รู้จัก",
+     "from_th": "attack bank = กลุ่มการโจมตีจาก dev split + ตัวอย่างที่เขียนเอง; embedder all-MiniLM-L6-v2"
+    },
+    {
+     "sym": "q",
+     "name": "Head probability",
+     "key": "q",
+     "src": "learned",
+     "text": "Logistic-regression head on the message embedding: how much the text reads like an instruction override. Long documents are scored per 2-sentence window and the worst window counts.",
+     "from": "fitted on dev attacks vs. dev benign text",
+     "name_th": "ความน่าจะเป็นจาก head",
+     "text_th": "logistic-regression head บน embedding ของข้อความ บอกว่าข้อความอ่านแล้วเหมือนการสั่งทับคำสั่งแค่ไหน เอกสารยาวจะให้คะแนนทีละหน้าต่าง 2 ประโยค และนับหน้าต่างที่แย่ที่สุด",
+     "from_th": "ฝึกจาก dev attacks เทียบกับข้อความ benign ใน dev"
+    },
+    {
+     "sym": "s_ours",
+     "name": "Our fused score",
+     "key": "s_ours",
+     "src": "learned",
+     "text": "s_v = w_q q + w_m m + min(eta, lambda f + lambda_g g); s = max over the raw and the canonical view. In the proposed system this is NOT the score the pipeline uses; FT-C replaces it (shown for comparison).",
+     "from": "weights w_q, w_m, lambda, lambda_g fitted on dev; eta is a design choice",
+     "name_th": "คะแนนรวมของเรา (fused)",
+     "text_th": "s_v = w_q q + w_m m + min(eta, lambda f + lambda_g g); s = ค่าสูงสุดระหว่างข้อความดิบกับข้อความ canonical ในระบบที่เสนอ นี่ไม่ใช่คะแนนที่ pipeline ใช้ เพราะ FT-C มาแทน (แสดงไว้เพื่อเปรียบเทียบ)",
+     "from_th": "น้ำหนัก w_q, w_m, lambda, lambda_g ฝึกจาก dev; eta เป็นค่าที่ออกแบบไว้"
+    },
+    {
+     "sym": "tau_f",
+     "name": "Fast-path threshold",
+     "key": "tau_f",
+     "src": "calibrated",
+     "text": "If m is above this (and no rule flag alone explains it) the event is blocked immediately: a high-precision, low-recall shortcut.",
+     "from": "a very high quantile of m on benign dev text (target FPR 0.1%)",
+     "name_th": "threshold ของ fast path",
+     "text_th": "ถ้า m สูงกว่าค่านี้ (และไม่ใช่แค่ rule flag อธิบายได้) event จะถูกบล็อกทันที เป็นทางลัดที่ precision สูงแต่ recall ต่ำ",
+     "from_th": "quantile สูงมากของ m บนข้อความ benign ใน dev (เป้า FPR 0.1%)"
+    },
+    {
+     "sym": "FT-C",
+     "name": "Fine-tuned content score",
+     "key": "ftc_score",
+     "src": "learned",
+     "text": "all-MiniLM-L6-v2 fine-tuned on the seed's dev split (about 900 attacks, 1,930 benign texts, 600 Alpaca hard negatives, 600 documents with an injection inside). A long text scores as high as its worst 256-token segment. THIS is the s that the rest of the pipeline reads.",
+     "from": "followup/ft_scorer.py",
+     "name_th": "คะแนนเนื้อหาจาก FT-C (fine-tuned)",
+     "text_th": "all-MiniLM-L6-v2 ที่ fine-tune บน dev split ของ seed (ราว 900 การโจมตี, benign 1,930 ข้อความ, hard negative จาก Alpaca 600, เอกสารที่ฝังการโจมตี 600) ข้อความยาวได้คะแนนเท่ากับ segment 256 token ที่แย่ที่สุด นี่คือ s ที่ส่วนที่เหลือของ pipeline อ่านไปใช้",
+     "from_th": "followup/ft_scorer.py"
+    },
+    {
+     "sym": "tau_ft",
+     "name": "Content block threshold",
+     "key": "tau_ft",
+     "src": "calibrated",
+     "text": "If the FT-C score is above this, the event is blocked at once without reaching the Decision Module. Set so that this path alone spends at most half of the false-positive budget on benign validation sessions.",
+     "from": "validation split, session-level budget",
+     "name_th": "threshold ของ content block",
+     "text_th": "ถ้าคะแนน FT-C สูงกว่าค่านี้ event จะถูกบล็อกทันทีโดยไม่ผ่าน Decision Module ตั้งให้ทางนี้ทางเดียวใช้ false-positive budget ไม่เกินครึ่งหนึ่งบน session benign ของ validation",
+     "from_th": "validation split, budget ระดับ session"
+    },
+    {
+     "sym": "s",
+     "name": "Content score (slot)",
+     "key": "s",
+     "src": "computed",
+     "text": "The score handed to Stages 3-4 and to the Decision Module. In the proposed system it equals the FT-C score.",
+     "from": "stage output",
+     "name_th": "คะแนนเนื้อหา (ช่อง s)",
+     "text_th": "คะแนนที่ส่งให้ด่าน 3-4 และ Decision Module ในระบบที่เสนอจะเท่ากับคะแนน FT-C",
+     "from_th": "ผลลัพธ์ของด่าน"
+    }
+   ],
+   "stage_th": "ด่าน 2 - Override check (ตรวจการสั่งทับคำสั่งเดิม)"
+  },
+  {
+   "stage": "Stage 3 - Relevance (retrieved content only)",
+   "items": [
+    {
+     "sym": "R",
+     "name": "Reference",
+     "key": "has_reference",
+     "src": "computed",
+     "text": "Embedding of the user's most recent new task. Authority principle: only a forwarded direct message that states a new task may change R; retrieved content never can.",
+     "from": "session state",
+     "name_th": "Reference (R)",
+     "text_th": "embedding ของ task ใหม่ล่าสุดของผู้ใช้ หลัก authority: มีเพียงข้อความตรงที่ถูก forward และระบุ task ใหม่เท่านั้นที่เปลี่ยน R ได้ เนื้อหาที่ดึงมาเปลี่ยนไม่ได้เลย",
+     "from_th": "สถานะของ session"
+    },
+    {
+     "sym": "omega*",
+     "name": "Top instruction window",
+     "key": "top_window",
+     "src": "computed",
+     "text": "The most instruction-like sentence window of the chunk. Relevance is measured on this window, not on the whole chunk, so on-topic text around a buried injection cannot hide it.",
+     "from": "Stage 2 head, per-window scores",
+     "name_th": "หน้าต่างที่เหมือนคำสั่งที่สุด",
+     "text_th": "หน้าต่างประโยคของ chunk ที่เหมือนคำสั่งที่สุด วัด relevance บนหน้าต่างนี้ ไม่ใช่ทั้ง chunk ดังนั้นข้อความตรงหัวข้อที่ล้อมการฝังคำสั่งไว้ก็บังไม่ได้",
+     "from_th": "head ของด่าน 2 คะแนนรายหน้าต่าง"
+    },
+    {
+     "sym": "r",
+     "name": "Relevance",
+     "key": "r",
+     "src": "computed",
+     "text": "Cosine similarity between omega* and R. Low = the chunk is asking for something unrelated to the user's task.",
+     "from": "embedding of the window vs. R",
+     "name_th": "Relevance (ความเกี่ยวข้อง)",
+     "text_th": "cosine similarity ระหว่าง omega* กับ R ค่าต่ำ = chunk นี้ขอสิ่งที่ไม่เกี่ยวกับงานของผู้ใช้",
+     "from_th": "embedding ของหน้าต่างเทียบกับ R"
+    }
+   ],
+   "stage_th": "ด่าน 3 - Relevance (เฉพาะเนื้อหาที่ดึงมา)"
+  },
+  {
+   "stage": "Stage 4 - Session behavior",
+   "items": [
+    {
+     "sym": "a",
+     "name": "CUSUM suspicion",
+     "key": "a",
+     "src": "computed",
+     "text": "a <- max(0, a + s - rho), updated on every direct message even when it is blocked. Several mildly suspicious messages add up even if none crosses a threshold.",
+     "from": "session state; reference level rho fitted on validation",
+     "name_th": "CUSUM suspicion (ความสงสัยสะสม)",
+     "text_th": "a <- max(0, a + s - rho) อัปเดตทุกข้อความตรง แม้จะถูกบล็อกก็ตาม ข้อความที่น่าสงสัยเล็กน้อยหลายข้อความจะสะสมกัน แม้ไม่มีข้อไหนข้ามเกณฑ์",
+     "from_th": "สถานะของ session; ระดับอ้างอิง rho ฝึกจาก validation"
+    },
+    {
+     "sym": "k",
+     "name": "Task resets",
+     "key": "k",
+     "src": "computed",
+     "text": "How many of the last W direct messages started a new task.",
+     "from": "session state, window W = 5",
+     "name_th": "จำนวนการเปลี่ยน task",
+     "text_th": "จากข้อความตรง W ข้อความล่าสุด มีกี่ข้อความที่เริ่ม task ใหม่",
+     "from_th": "สถานะของ session, หน้าต่าง W = 5"
+    },
+    {
+     "sym": "u",
+     "name": "Blocked-source count",
+     "key": "u",
+     "src": "computed",
+     "text": "How many times this source (the user or one document) has already been blocked in this session.",
+     "from": "session state",
+     "name_th": "จำนวนครั้งที่แหล่งถูกบล็อก",
+     "text_th": "แหล่งนี้ (ผู้ใช้หรือเอกสารหนึ่งชิ้น) เคยถูกบล็อกมาแล้วกี่ครั้งใน session นี้",
+     "from_th": "สถานะของ session"
+    },
+    {
+     "sym": "o",
+     "name": "Off-task share",
+     "key": "o",
+     "src": "computed",
+     "text": "Share of the last W retrieved chunks whose relevance r is below tau_o.",
+     "from": "session state; tau_o fitted on validation",
+     "name_th": "สัดส่วนนอก task",
+     "text_th": "สัดส่วนของ chunk ที่ดึงมา W ชิ้นล่าสุดที่ relevance r ต่ำกว่า tau_o",
+     "from_th": "สถานะของ session; tau_o ฝึกจาก validation"
+    },
+    {
+     "sym": "fbar",
+     "name": "Mean rule flags",
+     "key": "fbar",
+     "src": "computed",
+     "text": "Average rule flag over the retrieved chunks in the window.",
+     "from": "session state",
+     "name_th": "ค่าเฉลี่ย rule flag",
+     "text_th": "ค่าเฉลี่ยของ rule flag ในบรรดา chunk ที่ดึงมาในหน้าต่าง",
+     "from_th": "สถานะของ session"
+    },
+    {
+     "sym": "delta",
+     "name": "Relevance decline",
+     "key": "delta",
+     "src": "computed",
+     "text": "How far relevance has fallen from the first to the latest retrieval turn in the window (drift).",
+     "from": "session state",
+     "name_th": "relevance ที่ลดลง",
+     "text_th": "relevance ลดลงเท่าไรจากรอบการดึงแรกไปถึงรอบล่าสุดในหน้าต่าง (การ drift)",
+     "from_th": "สถานะของ session"
+    },
+    {
+     "sym": "h",
+     "name": "No-history flag",
+     "key": "h",
+     "src": "computed",
+     "text": "1 while there are fewer than k_min = 3 retrieved chunks in the window, so the behavior features are not yet meaningful.",
+     "from": "session state",
+     "name_th": "ธงยังไม่มีประวัติ",
+     "text_th": "เป็น 1 ขณะที่ chunk ที่ดึงมาในหน้าต่างมีน้อยกว่า k_min = 3 ชิ้น ฟีเจอร์พฤติกรรมจึงยังไม่มีความหมาย",
+     "from_th": "สถานะของ session"
+    },
+    {
+     "sym": "z",
+     "name": "No trusted reference",
+     "key": "z",
+     "src": "computed",
+     "text": "1 when there is no trusted reference R. Retrieved content is then at least Forward-Untrusted.",
+     "from": "session state; tau_a decides trust",
+     "name_th": "ไม่มี reference ที่เชื่อถือได้",
+     "text_th": "เป็น 1 เมื่อไม่มี reference R ที่เชื่อถือได้ เนื้อหาที่ดึงมาจะได้อย่างน้อย Forward-Untrusted",
+     "from_th": "สถานะของ session; tau_a ตัดสินความเชื่อถือ"
+    },
+    {
+     "sym": "c",
+     "name": "Channel",
+     "key": "c",
+     "src": "computed",
+     "text": "0 = typed by the user (direct), 1 = retrieved content (indirect).",
+     "from": "input",
+     "name_th": "ช่องทาง (Channel)",
+     "text_th": "0 = ผู้ใช้พิมพ์เอง (direct), 1 = เนื้อหาที่ดึงมา (indirect)",
+     "from_th": "อินพุต"
+    },
+    {
+     "sym": "n_imp / n_ai",
+     "name": "Lexical counts",
+     "key": "n_imp",
+     "src": "computed",
+     "text": "Number of imperative verbs and of phrases addressing the AI (\"you must\", \"assistant\").",
+     "from": "pidetect/lexical.py",
+     "name_th": "จำนวนเชิงภาษา (Lexical counts)",
+     "text_th": "จำนวนคำกริยาสั่ง (imperative) และวลีที่พูดกับ AI (\"you must\", \"assistant\")",
+     "from_th": "pidetect/lexical.py"
+    }
+   ],
+   "stage_th": "ด่าน 4 - Session behavior (พฤติกรรมตลอด session)"
+  },
+  {
+   "stage": "Decision Module",
+   "items": [
+    {
+     "sym": "p",
+     "name": "Injection probability",
+     "key": "p",
+     "src": "learned",
+     "text": "Logistic regression over the 13 features (s, a, k, u, r, c, z, n_imp, n_ai, o, fbar, delta, h). Contributions below show how much each feature pushed p up or down.",
+     "from": "fitted on a validation split of simulated sessions",
+     "name_th": "ความน่าจะเป็นว่าเป็น injection",
+     "text_th": "logistic regression บน 13 ฟีเจอร์ (s, a, k, u, r, c, z, n_imp, n_ai, o, fbar, delta, h) แถบ contribution ด้านล่างแสดงว่าแต่ละฟีเจอร์ดัน p ขึ้นหรือลงเท่าไร",
+     "from_th": "ฝึกบน validation split ของ session จำลอง"
+    },
+    {
+     "sym": "t_rev",
+     "name": "Untrusted threshold",
+     "key": "t_rev",
+     "src": "calibrated",
+     "text": "p above this: Forward-Untrusted (passed on, marked as retrieved data).",
+     "from": "validation, 5% budget",
+     "name_th": "threshold ของ Untrusted",
+     "text_th": "p สูงกว่าค่านี้: Forward-Untrusted (ส่งต่อได้ แต่ติดป้ายว่าเป็นข้อมูลที่ดึงมา)",
+     "from_th": "validation, budget 5%"
+    },
+    {
+     "sym": "t_blk",
+     "name": "Block threshold",
+     "key": "t_blk",
+     "src": "calibrated",
+     "text": "p above this: Block. Found by bisection so that at most 2% of benign validation sessions contain a block.",
+     "from": "validation, session-level budget",
+     "name_th": "threshold ของ Block",
+     "text_th": "p สูงกว่าค่านี้: Block หาด้วย bisection ให้ session benign ของ validation มี block ไม่เกิน 2%",
+     "from_th": "validation, budget ระดับ session"
+    }
+   ],
+   "stage_th": "Decision Module (ตัวตัดสินใจ)"
+  }
+ ],
+ "provenance_legend_th": {
+  "computed": "คำนวณใหม่ทุก event จากข้อความและสถานะของ session",
+  "learned": "เรียนรู้จาก development split ของ seed นั้น (ไม่เคยใช้ validation หรือ test)",
+  "calibrated": "ตั้งค่าบน validation split เพื่อให้ false-positive budget บนข้อมูล benign อยู่ในเกณฑ์",
+  "design": "ค่าที่ออกแบบไว้ตายตัวและบันทึกไว้ก่อนเริ่มการทดลอง"
+ }
+}

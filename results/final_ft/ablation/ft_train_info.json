@@ -1,0 +1,42 @@
+{
+ "20": {
+  "n_pos": 902,
+  "n_inj": 600,
+  "n_neg": 1930,
+  "n_hard": 600,
+  "n_conflicts": 0,
+  "train_seconds": 70.8
+ },
+ "21": {
+  "n_pos": 903,
+  "n_inj": 600,
+  "n_neg": 1929,
+  "n_hard": 600,
+  "n_conflicts": 0,
+  "train_seconds": 70.4
+ },
+ "22": {
+  "n_pos": 903,
+  "n_inj": 600,
+  "n_neg": 1928,
+  "n_hard": 600,
+  "n_conflicts": 0,
+  "train_seconds": 69.6
+ },
+ "23": {
+  "n_pos": 903,
+  "n_inj": 600,
+  "n_neg": 1920,
+  "n_hard": 600,
+  "n_conflicts": 0,
+  "train_seconds": 69.5
+ },
+ "24": {
+  "n_pos": 903,
+  "n_inj": 600,
+  "n_neg": 1936,
+  "n_hard": 600,
+  "n_conflicts": 0,
+  "train_seconds": 69.6
+ }
+}
