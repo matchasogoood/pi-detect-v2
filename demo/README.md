@@ -42,6 +42,9 @@ running. Wait for `demo ready`.
   attack inserted, mock knowledge base) or clean documents (TaskTracker, BIPIA, mock knowledge base, security
   articles that quote attacks). It picks the dataset first, so small datasets are not drowned by large ones. For a
   document it first sends the matching user task.
+- **Click a pipeline box** to open the variable glossary at that stage with every variable of the stage marked (same panel as
+  the *What are these variables?* button); the matching card in the Numbers panel is highlighted too. The user-prompt,
+  retrieved-content and interceptor boxes explain the channel flag `c`.
 - **Language toggle (EN / TH)** in the header. English is the default. Thai changes the buttons, headings, hints and the
   whole variable glossary; the pipeline diagram, the chat texts, the verdicts and the numbers stay in English so they match
   the paper. The choice is not remembered between visits. Thai texts live in `glossary.json` and `examples.json` (`*_th` fields).

@@ -451,6 +451,8 @@ function focusNums(id){
   document.querySelectorAll(".nd").forEach(x=>x.classList.remove("focus")); document.querySelectorAll(".card").forEach(x=>x.classList.remove("focus"));
   const m={s1:"n-s1",s2:"n-s2",bank:"n-s2",s3:"n-s3",s4:"n-s4",dir:"n-s4",dm:"n-dm",f0:"n-dm",f1:"n-dm",f2:"n-dm",ses:"n-st"}[id]; NODE[id]?.classList.add("focus");
   const c=m&&$("#"+m); if(c){ c.classList.add("focus"); c.scrollIntoView({behavior:"smooth",block:"nearest"}); }
+  if(id in GSTAGE) openGlossStage(GSTAGE[id]);        // same explanation as the "What are these variables?" button, at this stage
+  else openGloss("c");                                  // user prompt / retrieved content / text interceptor: the channel flag
 }
 
 /* ---------- language: EN (default) / TH. Thai covers the buttons, headings, hints and the variable glossary;
@@ -492,13 +494,20 @@ document.addEventListener("click",ev=>{ const b=ev.target.closest("#lang button"
 function buildGloss(){
   const q=($("#gq").value||"").toLowerCase(); let h='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">'
    +Object.entries(TH()?gloss.provenance_legend_th:gloss.provenance_legend).map(([k,v])=>'<span class="pill" style="margin:0" title="'+esc(v)+'">'+k+': '+esc(v)+'</span>').join("")+'</div>';
-  gloss.groups.forEach(g=>{
+  gloss.groups.forEach((g,gi)=>{
     const items=g.items.filter(i=>!q||(i.sym+" "+i.key+" "+GL(i,"name")+" "+GL(i,"text")+" "+GL(i,"from")).toLowerCase().includes(q)); if(!items.length) return;
-    h+='<div class="g-stage">'+esc(TH()&&g.stage_th?g.stage_th:g.stage)+'</div>';
-    items.forEach(i=>{ h+='<div class="g-item" data-k="'+esc(i.key)+'" data-s="'+esc(i.sym)+'"><div class="h"><code>'+esc(i.sym)+'</code><b>'+esc(GL(i,"name"))+'</b><span class="pill">'+esc(i.src)+'</span></div><p>'+esc(GL(i,"text"))+'</p><div class="from">'+tr("source")+' '+esc(GL(i,"from"))+'</div></div>'; });
+    h+='<div class="g-stage" data-gi="'+gi+'">'+esc(TH()&&g.stage_th?g.stage_th:g.stage)+'</div>';
+    items.forEach(i=>{ h+='<div class="g-item" data-gi="'+gi+'" data-k="'+esc(i.key)+'" data-s="'+esc(i.sym)+'"><div class="h"><code>'+esc(i.sym)+'</code><b>'+esc(GL(i,"name"))+'</b><span class="pill">'+esc(i.src)+'</span></div><p>'+esc(GL(i,"text"))+'</p><div class="from">'+tr("source")+' '+esc(GL(i,"from"))+'</div></div>'; });
   });
   if(cfg){ const thr=cfg.thresholds; h+='<div class="g-stage">'+tr("fixed")+'</div><div class="g-item"><div class="from">'+Object.entries(thr).map(([k,v])=>k+' = '+fmt(v)).join(" &nbsp;|&nbsp; ")+'</div></div>'; }
   $("#gbody").innerHTML=h;
+}
+/* clicking a pipeline box: open the glossary at that stage and mark every variable of the stage */
+const GSTAGE={s1:0,s2:1,bank:1,s3:2,s4:3,dir:3,ses:3,dm:4,f0:4,f1:4,f2:4};
+function openGlossStage(gi){
+  $("#gq").value=""; buildGloss(); $("#gloss").classList.add("open");
+  const items=[...document.querySelectorAll('.g-item[data-gi="'+gi+'"]')]; items.forEach(x=>x.classList.add("hl"));
+  const head=document.querySelector('.g-stage[data-gi="'+gi+'"]'); (head||items[0])?.scrollIntoView({block:"start"});
 }
 function openGloss(key){
   $("#gq").value=""; buildGloss(); $("#gloss").classList.add("open");
